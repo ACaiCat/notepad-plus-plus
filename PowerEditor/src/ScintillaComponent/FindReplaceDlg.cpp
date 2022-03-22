@@ -4291,7 +4291,8 @@ void Finder::finishFilesSearch(int count, int searchedCount, bool isMatchLines, 
 	addSearchHitCount(count, searchedCount, isMatchLines, searchedEntireNotSelection);
 	_scintView.execute(SCI_SETSEL, 0, 0);
 
-	_scintView.execute(SCI_SETLEXER, SCLEX_SEARCHRESULT);
+	//_scintView.execute(SCI_SETLEXER, SCLEX_SEARCHRESULT);
+	_scintView.setLexerFromID(SCLEX_SEARCHRESULT);
 	_scintView.execute(SCI_SETPROPERTY, reinterpret_cast<WPARAM>("fold"), reinterpret_cast<LPARAM>("1"));
 }
 

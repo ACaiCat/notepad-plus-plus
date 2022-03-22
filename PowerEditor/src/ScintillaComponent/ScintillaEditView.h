@@ -222,6 +222,8 @@ public:
 		}
 	};
 
+	bool setLexerFromID(int lexerID);
+
 	void activateBuffer(BufferID buffer);
 
 	void getCurrentFoldStates(std::vector<size_t> & lineStateVector);
@@ -681,12 +683,12 @@ protected:
 	};
 
 	void setMakefileLexer() {
-		execute(SCI_SETLEXER, SCLEX_MAKEFILE);
+		setLexerFromID(SCLEX_MAKEFILE);
 		makeStyle(L_MAKEFILE);
 	};
 
 	void setIniLexer() {
-		execute(SCI_SETLEXER, SCLEX_PROPERTIES);
+		setLexerFromID(SCLEX_PROPERTIES);
 		execute(SCI_STYLESETEOLFILLED, SCE_PROPS_SECTION, true);
 		makeStyle(L_INI);
 		execute(SCI_SETPROPERTY, reinterpret_cast<WPARAM>("fold"), reinterpret_cast<LPARAM>("1"));

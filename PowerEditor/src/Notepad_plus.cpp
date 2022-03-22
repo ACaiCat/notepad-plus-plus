@@ -40,6 +40,7 @@
 #include "fileBrowser.h"
 #include "Common.h"
 #include "NppDarkMode.h"
+#include "ScintillaTypes.h"
 
 using namespace std;
 
@@ -2982,7 +2983,7 @@ void Notepad_plus::addHotSpot(ScintillaEditView* view)
 
 	int urlAction = (NppParameters::getInstance()).getNppGUI()._styleURL;
 	LPARAM indicStyle = (urlAction == urlNoUnderLineFg) || (urlAction == urlNoUnderLineBg) ? INDIC_HIDDEN : INDIC_PLAIN;
-	LPARAM indicHoverStyle = (urlAction == urlNoUnderLineBg) || (urlAction == urlUnderLineBg) ? INDIC_FULLBOX : INDIC_EXPLORERLINK;
+	LPARAM indicHoverStyle = (LPARAM)(((urlAction == urlNoUnderLineBg) || (urlAction == urlUnderLineBg)) ? Scintilla::IndicatorStyle::FullBox : Scintilla::IndicatorStyle::ExplorerLink);
 	LPARAM indicStyleCur = pView->execute(SCI_INDICGETSTYLE, URL_INDIC);
 	LPARAM indicHoverStyleCur = pView->execute(SCI_INDICGETHOVERSTYLE, URL_INDIC);
 

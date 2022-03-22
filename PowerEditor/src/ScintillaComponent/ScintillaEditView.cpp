@@ -22,6 +22,8 @@
 #include "Parameters.h"
 #include "Sorters.h"
 #include "verifySignedfile.h"
+#include "ILexer.h"
+#include "Lexilla.h"
 
 using namespace std;
 
@@ -630,7 +632,7 @@ void ScintillaEditView::setXmlLexer(LangType type)
 {
 	if (type == L_XML)
 	{
-        execute(SCI_SETLEXER, SCLEX_XML);
+		setLexerFromID(SCLEX_XML);
 		for (int i = 0 ; i < 4 ; ++i)
 			execute(SCI_SETKEYWORDS, i, reinterpret_cast<LPARAM>(TEXT("")));
 
@@ -640,7 +642,7 @@ void ScintillaEditView::setXmlLexer(LangType type)
 	}
 	else if ((type == L_HTML) || (type == L_PHP) || (type == L_ASP) || (type == L_JSP))
 	{
-        execute(SCI_SETLEXER, SCLEX_HTML);
+		setLexerFromID(SCLEX_HTML);
         const TCHAR *htmlKeyWords_generic = NppParameters::getInstance().getWordList(L_HTML, LANG_INDEX_INSTR);
 
 		WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
@@ -679,7 +681,7 @@ void ScintillaEditView::setEmbeddedJSLexer()
 
 void ScintillaEditView::setJsonLexer()
 {
-	execute(SCI_SETLEXER, SCLEX_JSON);
+	setLexerFromID(SCLEX_JSON);
 
 	const TCHAR *pKwArray[10] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 
@@ -749,7 +751,7 @@ void ScintillaEditView::setEmbeddedAspLexer()
 void ScintillaEditView::setUserLexer(const TCHAR *userLangName)
 {
 	int setKeywordsCounter = 0;
-    execute(SCI_SETLEXER, SCLEX_USER);
+	setLexerFromID(SCLEX_USER);
 
 	UserLangContainer * userLangContainer = userLangName? NppParameters::getInstance().getULCFromName(userLangName):_userDefineDlg._pCurrentUserLang;
 
@@ -883,7 +885,7 @@ void ScintillaEditView::setExternalLexer(LangType typeDoc)
 	WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
 	const char *pName = wmc.wchar2char(name, CP_ACP);
 
-	execute(SCI_SETLEXERLANGUAGE, 0, reinterpret_cast<LPARAM>(pName));
+	execute(SCI_SETILEXER, 0, reinterpret_cast<LPARAM>(pName));
 
 	LexerStyler *pStyler = (NppParameters::getInstance().getLStylerArray()).getLexerStylerByName(name);
 	if (pStyler)
@@ -911,7 +913,7 @@ void ScintillaEditView::setCppLexer(LangType langType)
     const char *cppTypes;
     const TCHAR *doxygenKeyWords  = NppParameters::getInstance().getWordList(L_CPP, LANG_INDEX_TYPE2);
 
-    execute(SCI_SETLEXER, SCLEX_CPP);
+	setLexerFromID(SCLEX_CPP);
 
 	if (langType != L_RC)
     {
@@ -961,7 +963,7 @@ void ScintillaEditView::setJsLexer()
 {
 	const TCHAR *doxygenKeyWords = NppParameters::getInstance().getWordList(L_CPP, LANG_INDEX_TYPE2);
 
-	execute(SCI_SETLEXER, SCLEX_CPP);
+	setLexerFromID(SCLEX_CPP);
 	const TCHAR *pKwArray[10] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 	makeStyle(L_JAVASCRIPT, pKwArray);
 
@@ -1075,7 +1077,7 @@ void ScintillaEditView::setTclLexer()
     const char *tclTypes;
 
 
-    execute(SCI_SETLEXER, SCLEX_TCL);
+	setLexerFromID(SCLEX_TCL);
 
 	const TCHAR *pKwArray[10] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 	makeStyle(L_TCL, pKwArray);
@@ -1102,7 +1104,7 @@ void ScintillaEditView::setTclLexer()
 
 void ScintillaEditView::setObjCLexer(LangType langType)
 {
-    execute(SCI_SETLEXER, SCLEX_OBJC);
+	setLexerFromID(SCLEX_OBJC);
 
 	const TCHAR *pKwArray[10] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
@@ -1164,7 +1166,7 @@ void ScintillaEditView::setObjCLexer(LangType langType)
 void ScintillaEditView::setTypeScriptLexer()
 {
 	const TCHAR* doxygenKeyWords = NppParameters::getInstance().getWordList(L_CPP, LANG_INDEX_TYPE2);
-	execute(SCI_SETLEXER, SCLEX_CPP);
+	setLexerFromID(SCLEX_CPP);
 	
 	if (doxygenKeyWords)
 	{
@@ -1215,7 +1217,7 @@ void ScintillaEditView::setKeywords(LangType langType, const char *keywords, int
 
 void ScintillaEditView::setLexer(int lexerID, LangType langType, int whichList)
 {
-	execute(SCI_SETLEXER, lexerID);
+	setLexerFromID(lexerID);
 
 	const TCHAR *pKwArray[10] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
@@ -1706,7 +1708,7 @@ void ScintillaEditView::defineDocType(LangType typeDoc)
 			if (typeDoc >= L_EXTERNAL && typeDoc < NppParameters::getInstance().L_END)
 				setExternalLexer(typeDoc);
 			else
-				execute(SCI_SETLEXER, (_codepage == CP_CHINESE_TRADITIONAL) ? SCLEX_MAKEFILE : SCLEX_NULL);
+				setLexerFromID((_codepage == CP_CHINESE_TRADITIONAL) ? SCLEX_MAKEFILE : SCLEX_NULL);
 			break;
 
 	}
@@ -1880,6 +1882,18 @@ void ScintillaEditView::styleChange()
 {
 	defineDocType(_currentBuffer->getLangType());
 	restyleBuffer();
+}
+
+bool ScintillaEditView::setLexerFromID(int lexerID)
+{
+#pragma warning( push )
+#pragma warning( disable : 4996)
+	const char* pName = LexerNameFromID(lexerID); //deprecated, therefore disabled warning
+#pragma warning( pop ) 
+	if (!pName)
+		return false;
+	execute(SCI_SETILEXER, 0, reinterpret_cast<LPARAM>(CreateLexer(pName)));
+	return true;
 }
 
 void ScintillaEditView::activateBuffer(BufferID buffer)
