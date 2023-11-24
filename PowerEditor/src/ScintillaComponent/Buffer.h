@@ -28,11 +28,12 @@ typedef Buffer* BufferID;	//each buffer has unique ID by which it can be retriev
 typedef sptr_t Document;
 
 enum DocFileStatus {
-	DOC_REGULAR    = 0x01, // should not be combined with anything
-	DOC_UNNAMED    = 0x02, // not saved (new ##)
-	DOC_DELETED    = 0x04, // doesn't exist in environment anymore, but not DOC_UNNAMED
-	DOC_MODIFIED   = 0x08, // File in environment has changed
-	DOC_NEEDRELOAD = 0x10  // File is modified & needed to be reload (by log monitoring)
+	DOC_REGULAR      = 0x01, // should not be combined with anything
+	DOC_UNNAMED      = 0x02, // not saved (new ##)
+	DOC_DELETED      = 0x04, // doesn't exist in environment anymore, but not DOC_UNNAMED
+	DOC_MODIFIED     = 0x08, // File in environment has changed
+	DOC_NEEDRELOAD   = 0x10, // File is modified & needed to be reload (by log monitoring)
+	DOC_INACCESSIBLE = 0x20  // File is absent on its load; this status is temporay for setting file not dirty & readonly; and it will be replaced to DOC_DELETED
 };
 
 enum BufferStatusInfo {
@@ -53,7 +54,16 @@ enum BufferStatusInfo {
 enum SavingStatus {
 	SaveOK             = 0,
 	SaveOpenFailed     = 1,
-	SaveWritingFailed  = 2
+	SaveWritingFailed  = 2,
+	NotEnoughRoom      = 3
+};
+
+struct BufferViewInfo {
+	BufferID _bufID = 0;
+	int _iView = 0;
+
+	BufferViewInfo() = delete;
+	BufferViewInfo(BufferID buf, int view) : _bufID(buf), _iView(view) {};
 };
 
 const TCHAR UNTITLED_STR[] = TEXT("new ");
@@ -69,7 +79,7 @@ public:
 	size_t getNbDirtyBuffers() const;
 	int getBufferIndexByID(BufferID id);
 	Buffer * getBufferByIndex(size_t index);
-	Buffer * getBufferByID(BufferID id) {return static_cast<Buffer*>(id);}
+	Buffer * getBufferByID(BufferID id) {return id;}
 
 	void beNotifiedOfBufferChange(Buffer * theBuf, int mask);
 
@@ -79,10 +89,11 @@ public:
 
 	BufferID loadFile(const TCHAR * filename, Document doc = static_cast<Document>(NULL), int encoding = -1, const TCHAR *backupFileName = nullptr, FILETIME fileNameTimestamp = {});	//ID == BUFFER_INVALID on failure. If Doc == NULL, a new file is created, otherwise data is loaded in given document
 	BufferID newEmptyDocument();
-	//create Buffer from existing Scintilla, used from new Scintillas. If dontIncrease = true, then the new document number isnt increased afterwards.
-	//usefull for temporary but neccesary docs
-	//If dontRef = false, then no extra reference is added for the doc. Its the responsibility of the caller to do so
-	BufferID bufferFromDocument(Document doc,  bool dontIncrease = false, bool dontRef = false);
+	// create an empty placeholder for a missing file when loading session
+	BufferID newPlaceholderDocument(const TCHAR * missingFilename, int whichOne, const wchar_t* userCreatedSessionName);
+
+	//create Buffer from existing Scintilla, used from new Scintillas.
+	BufferID bufferFromDocument(Document doc, bool isMainEditZone);
 
 	BufferID getBufferFromName(const TCHAR * name);
 	BufferID getBufferFromDocument(Document doc);
@@ -174,6 +185,9 @@ public:
 	bool isReadOnly() const { return (_isUserReadOnly || _isFileReadOnly); }
 
 	bool isUntitled() const { return ((_currentStatus & DOC_UNNAMED) == DOC_UNNAMED); }
+
+	bool isInaccessible() const { return _isInaccessible; }
+	void setInaccessibility(bool val) { _isInaccessible = val; }
 
 	bool getFileReadOnly() const { return _isFileReadOnly; }
 
@@ -320,6 +334,14 @@ public:
 	bool allowSmartHilite() const;
 	bool allowClickableLink() const;
 
+	void setDocColorId(int idx) {
+		_docColorId = idx;
+	};
+
+	int getDocColorId() {
+		return _docColorId;
+	};
+
 private:
 	int indexOfReference(const ScintillaEditView * identifier) const;
 
@@ -369,6 +391,8 @@ private:
 	long _recentTag = -1;
 	static long _recentTagCtr;
 
+	int _docColorId = -1;
+
 	// For backup system
 	generic_string _backupFileName;
 	bool _isModified = false;
@@ -394,4 +418,6 @@ private:
 	MapPosition _mapPosition;
 
 	std::mutex _reloadFromDiskRequestGuard;
+
+	bool _isInaccessible = false;
 };

@@ -27,12 +27,12 @@ intptr_t CALLBACK AboutDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lPar
 {
 	switch (message)
 	{
-        case WM_INITDIALOG :
+		case WM_INITDIALOG:
 		{
 			NppDarkMode::autoSubclassAndThemeChildControls(_hSelf);
 
 			HWND compileDateHandle = ::GetDlgItem(_hSelf, IDC_BUILD_DATETIME);
-			generic_string buildTime = TEXT("Build time : ");
+			generic_string buildTime = TEXT("Build time: ");
 
 			WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
 			buildTime +=  wmc.char2wchar(__DATE__, CP_ACP);
@@ -58,7 +58,8 @@ intptr_t CALLBACK AboutDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lPar
 			//_pageLink.create(::GetDlgItem(_hSelf, IDC_HOME_ADDR), TEXT("https://notepad-plus-plus.org/news/v844-happy-users-edition/"));
 
             _pageLink.init(_hInst, _hSelf);
-            _pageLink.create(::GetDlgItem(_hSelf, IDC_HOME_ADDR), TEXT("https://notepad-plus-plus.org/"));
+            //_pageLink.create(::GetDlgItem(_hSelf, IDC_HOME_ADDR), TEXT("https://notepad-plus-plus.org/"));
+            _pageLink.create(::GetDlgItem(_hSelf, IDC_HOME_ADDR), TEXT("https://notepad-plus-plus.org/news/v86-20thyearanniversary"));
 
 			getClientRect(_rc);
 
@@ -68,11 +69,7 @@ intptr_t CALLBACK AboutDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lPar
 		case WM_CTLCOLORDLG:
 		case WM_CTLCOLORSTATIC:
 		{
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-			}
-			break;
+			return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
 		}
 
 		case WM_PRINTCLIENT:
@@ -97,7 +94,7 @@ intptr_t CALLBACK AboutDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lPar
 			int w = dpiManager.scaleX(iconSideSize);
 			int h = dpiManager.scaleY(iconSideSize);
 
-			HICON hIcon;
+			HICON hIcon = nullptr;
 			if (NppDarkMode::isEnabled())
 				hIcon = (HICON)::LoadImage(_hInst, MAKEINTRESOURCE(IDI_CHAMELEON_DM), IMAGE_ICON, w, h, LR_DEFAULTSIZE);
 			else
@@ -123,6 +120,7 @@ intptr_t CALLBACK AboutDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM lPar
 				default :
 					break;
 			}
+			break;
 		}
 
 		case WM_DESTROY :
@@ -138,8 +136,8 @@ void AboutDlg::doDialog()
 	if (!isCreated())
 		create(IDD_ABOUTBOX);
 
-    // Adjust the position of AboutBox
-	goToCenter();
+	// Adjust the position of AboutBox
+	goToCenter(SWP_SHOWWINDOW | SWP_NOSIZE);
 }
 
 
@@ -168,7 +166,11 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 			_debugInfoStr += buildTime;
 			_debugInfoStr += TEXT("\r\n");
 
-#if defined(__GNUC__)
+#if defined(__clang__)
+			_debugInfoStr += TEXT("Built with : Clang ");
+			_debugInfoStr += wmc.char2wchar(__clang_version__, CP_ACP);
+			_debugInfoStr += TEXT("\r\n");
+#elif defined(__GNUC__)
 			_debugInfoStr += TEXT("Built with : GCC ");
 			_debugInfoStr += wmc.char2wchar(__VERSION__, CP_ACP);
 			_debugInfoStr += TEXT("\r\n");
@@ -178,7 +180,7 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 
 			// Binary path
 			_debugInfoStr += TEXT("Path : ");
-			TCHAR nppFullPath[MAX_PATH];
+			TCHAR nppFullPath[MAX_PATH]{};
 			::GetModuleFileName(NULL, nppFullPath, MAX_PATH);
 			_debugInfoStr += nppFullPath;
 			_debugInfoStr += TEXT("\r\n");
@@ -207,7 +209,7 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 			_debugInfoStr += TEXT("\r\n");
 
 			// OS information
-			HKEY hKey;
+			HKEY hKey = nullptr;
 			DWORD dataSize = 0;
 
 			constexpr size_t bufSize = 96;
@@ -252,10 +254,18 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 			{
 				swprintf(szProductName, bufSize, TEXT("%s"), (NppParameters::getInstance()).getWinVersionStr().c_str());
 			}
-
-			// Override ProductName if it's Windows 11
-			if (NppDarkMode::isWindows11())
-				swprintf(szProductName, bufSize, TEXT("%s"), TEXT("Windows 11"));
+			else if (NppDarkMode::isWindows11())
+			{
+				generic_string tmpProductName = szProductName;
+				constexpr size_t strLen = 10U;
+				const TCHAR strWin10[strLen + 1U] = TEXT("Windows 10");
+				const size_t pos = tmpProductName.find(strWin10);
+				if (pos < (bufSize - strLen - 1U))
+				{
+					tmpProductName.replace(pos, strLen, TEXT("Windows 11"));
+					swprintf(szProductName, bufSize, TEXT("%s"), tmpProductName.c_str());
+				}
+			}
 
 			if (szCurrentBuildNumber[0] == '\0')
 			{
@@ -270,7 +280,7 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 			_debugInfoStr += szProductName;
 			_debugInfoStr += TEXT(" (");
 			_debugInfoStr += (NppParameters::getInstance()).getWinVerBitStr();
-			_debugInfoStr += TEXT(") ");
+			_debugInfoStr += TEXT(")");
 			_debugInfoStr += TEXT("\r\n");
 
 			if (szReleaseId[0] != '\0')
@@ -322,9 +332,6 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 			_debugInfoStr += _loadedPlugins.length() == 0 ? TEXT("none") : _loadedPlugins;
 			_debugInfoStr += TEXT("\r\n");
 
-			_copyToClipboardLink.init(_hInst, _hSelf);
-			_copyToClipboardLink.create(::GetDlgItem(_hSelf, IDC_DEBUGINFO_COPYLINK), IDC_DEBUGINFO_COPYLINK);
-
 			getClientRect(_rc);
 			return TRUE;
 		}
@@ -332,11 +339,7 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 		case WM_CTLCOLORDLG:
 		case WM_CTLCOLORSTATIC:
 		{
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-			}
-			break;
+			return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
 		}
 
 		case WM_PRINTCLIENT:
@@ -365,19 +368,21 @@ intptr_t CALLBACK DebugInfoDlg::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 
 				case IDC_DEBUGINFO_COPYLINK:
 				{
-					if ((GetKeyState(VK_LBUTTON) & 0x100) != 0)
-					{
-						// Visual effect
-						::SendDlgItemMessage(_hSelf, IDC_DEBUGINFO_EDIT, EM_SETSEL, 0, _debugInfoDisplay.length() - 1);
+					// Visual effect
+					::SendDlgItemMessage(_hSelf, IDC_DEBUGINFO_EDIT, EM_SETSEL, 0, _debugInfoDisplay.length() - 1);
 
-						// Copy to clipboard
-						str2Clipboard(_debugInfoDisplay, _hSelf);
-					}
+					// Copy to clipboard
+					str2Clipboard(_debugInfoDisplay, _hSelf);
+
+					// Set focus to edit control
+					::SendMessage(_hSelf, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(::GetDlgItem(_hSelf, IDC_DEBUGINFO_EDIT)), TRUE);
+
 					return TRUE;
 				}
 				default:
 					break;
 			}
+			break;
 		}
 
 		case WM_DESTROY:
@@ -398,7 +403,7 @@ void DebugInfoDlg::doDialog()
 	refreshDebugInfo();
 
 	// Adjust the position of AboutBox
-	goToCenter();
+	goToCenter(SWP_SHOWWINDOW | SWP_NOSIZE);
 }
 
 void DebugInfoDlg::refreshDebugInfo()
@@ -440,8 +445,8 @@ void DoSaveOrNotBox::changeLang()
 
 	if (nativeLangSpeaker->changeDlgLang(_hSelf, "DoSaveOrNot"))
 	{
-		const unsigned char len = 255;
-		TCHAR text[len];
+		constexpr unsigned char len = 255;
+		TCHAR text[len]{};
 		::GetDlgItemText(_hSelf, IDC_DOSAVEORNOTTEXT, text, len);
 		msg = text;
 	}
@@ -464,18 +469,14 @@ intptr_t CALLBACK DoSaveOrNotBox::run_dlgProc(UINT message, WPARAM wParam, LPARA
 			changeLang();
 			::EnableWindow(::GetDlgItem(_hSelf, IDRETRY), _isMulti);
 			::EnableWindow(::GetDlgItem(_hSelf, IDIGNORE), _isMulti);
-			goToCenter();
+			goToCenter(SWP_SHOWWINDOW | SWP_NOSIZE);
 			return TRUE;
 		}
 
 		case WM_CTLCOLORDLG:
 		case WM_CTLCOLORSTATIC:
 		{
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-			}
-			break;
+			return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
 		}
 
 		case WM_PRINTCLIENT:
@@ -526,6 +527,7 @@ intptr_t CALLBACK DoSaveOrNotBox::run_dlgProc(UINT message, WPARAM wParam, LPARA
 					return TRUE;
 				}
 			}
+			break;
 		}
 		default:
 			return FALSE;
@@ -556,8 +558,8 @@ void DoSaveAllBox::changeLang()
 
 	if (nativeLangSpeaker->changeDlgLang(_hSelf, "DoSaveAll"))
 	{
-		const size_t len = 1024;
-		TCHAR text[len];
+		constexpr size_t len = 1024;
+		TCHAR text[len]{};
 		::GetDlgItemText(_hSelf, IDC_DOSAVEALLTEXT, text, len);
 		msg = text;
 	}
@@ -577,18 +579,14 @@ intptr_t CALLBACK DoSaveAllBox::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 		NppDarkMode::autoSubclassAndThemeChildControls(_hSelf);
 
 		changeLang();
-		goToCenter();
+		goToCenter(SWP_SHOWWINDOW | SWP_NOSIZE);
 		return TRUE;
 	}
 
 	case WM_CTLCOLORDLG:
 	case WM_CTLCOLORSTATIC:
 	{
-		if (NppDarkMode::isEnabled())
-		{
-			return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-		}
-		break;
+		return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
 	}
 
 	case WM_PRINTCLIENT:
@@ -632,6 +630,7 @@ intptr_t CALLBACK DoSaveAllBox::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
 				return TRUE;
 			}
 		}
+		break;
 	}
 	default:
 		return FALSE;

@@ -19,9 +19,7 @@
 
 #include "Window.h"
 #include "TaskListDlg.h"
-
-class Buffer;
-typedef Buffer * BufferID;	//each buffer has unique ID by which it can be retrieved
+#include "Buffer.h"
 
 #define SORT_DIRECTION_NONE     -1
 #define SORT_DIRECTION_UP     0
@@ -31,14 +29,8 @@ typedef Buffer * BufferID;	//each buffer has unique ID by which it can be retrie
 #define FS_CLMNNAME					"ColumnName"
 #define FS_CLMNEXT					"ColumnExt"
 #define FS_CLMNPATH					"ColumnPath"
+#define FS_LVGROUPS					"ListGroups"
 
-struct SwitcherFileInfo {
-	BufferID _bufID = 0;
-	int _iView = 0;
-
-	SwitcherFileInfo() = delete;
-	SwitcherFileInfo(BufferID buf, int view) : _bufID(buf), _iView(view){};
-};
 
 class VerticalFileSwitcherListView : public Window
 {
@@ -58,6 +50,7 @@ public:
 	void activateItem(BufferID bufferID, int iView);
 	void setItemIconStatus(BufferID bufferID);
 	generic_string getFullFilePath(size_t i) const;
+	void setItemColor(BufferID bufferID);
 	
 	void insertColumn(const TCHAR *name, int width, int index);
 	void resizeColumns(int totalWidth);
@@ -68,8 +61,9 @@ public:
 		return static_cast<int32_t>(SendMessage(_hSelf, LVM_GETSELECTEDCOUNT, 0, 0));
 	};
 
-	std::vector<SwitcherFileInfo> getSelectedFiles(bool reverse = false) const;
+	std::vector<BufferViewInfo> getSelectedFiles(bool reverse = false) const;
 	void reload();
+	void redrawItems();
 	void ensureVisibleCurrentItem() const {
 		ListView_EnsureVisible(_hSelf, _currentIndex, false);
 	};
@@ -90,9 +84,12 @@ protected:
 
 	int _currentIndex = 0;
 
+	static const int _groupID = 1;
+	static const int _group2ID = 2;
+
 	int find(BufferID bufferID, int iView) const;
 	int add(BufferID bufferID, int iView);
-	void remove(int index);
+	void remove(int index, bool removeFromListview = true);
 	void removeAll();
 	void selectCurrentItem() const {
 		ListView_SetItemState(_hSelf, _currentIndex, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);

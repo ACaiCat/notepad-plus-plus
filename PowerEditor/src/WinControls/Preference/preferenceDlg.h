@@ -19,7 +19,6 @@
 
 #include "ControlsTab.h"
 #include "preference_rc.h"
-#include "URLCtrl.h"
 #include "Parameters.h"
 #include "regExtDlg.h"
 #include "WordStyleDlg.h"
@@ -30,7 +29,7 @@ public :
 	MiscSubDlg() = default;
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class GeneralSubDlg : public StaticDialog
@@ -40,18 +39,42 @@ public :
 	void setTabbarAlternateIcons(bool enable = false);
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class EditingSubDlg : public StaticDialog
 {
+friend class PreferenceDlg;
 public :
 	EditingSubDlg() = default;
+	~EditingSubDlg() {
+		if (_tip != nullptr)
+		{
+			::DestroyWindow(_tip);
+			_tip = nullptr;
+		}
+
+		for (auto& tip : _tips)
+		{
+			if (tip != nullptr)
+			{
+				::DestroyWindow(tip);
+				tip = nullptr;
+			}
+		}
+	};
 	
 private :
 	HWND _tip = nullptr;
+	HWND _tipNote = nullptr;
+	HWND _tipAbb = nullptr;
+	HWND _tipCodepoint = nullptr;
+	HWND _tipNpcColor = nullptr;
+	HWND _tipNpcInclude = nullptr;
 
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	std::vector<HWND> _tips;
+
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 	void initScintParam();
 	void changeLineHiliteMode(bool enableSlider);
 };
@@ -75,7 +98,7 @@ private:
 	ColourPicker* _pHotEdgeColorPicker = nullptr;
 	ColourPicker* _pDisabledEdgeColorPicker = nullptr;
 
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 	void enableCustomizedColorCtrls(bool doEnable);
 	void move2CtrlLeft(int ctrlID, HWND handle2Move, int handle2MoveWidth, int handle2MoveHeight);
 };
@@ -108,7 +131,7 @@ private :
 			::SendDlgItemMessage(_hSelf, IDC_CHECK_OPENANSIASUTF8, BM_SETCHECK, BST_UNCHECKED, 0);
 		::EnableWindow(::GetDlgItem(_hSelf, IDC_CHECK_OPENANSIASUTF8), doIt);
 	};
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class DefaultDirectorySubDlg : public StaticDialog
@@ -117,36 +140,26 @@ public :
 	DefaultDirectorySubDlg() = default;
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class RecentFilesHistorySubDlg : public StaticDialog
 {
 public :
 	RecentFilesHistorySubDlg() = default;
-	virtual void destroy() {
-		_nbHistoryVal.destroy();
-		_customLenVal.destroy();
-	};
 private :
-	URLCtrl _nbHistoryVal;
-	URLCtrl _customLenVal;
 	void setCustomLen(int val);
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class LanguageSubDlg : public StaticDialog
 {
 public :
 	LanguageSubDlg() = default;
-	virtual void destroy() {
-		_tabSizeVal.destroy();
-	};
 
 private :
-    LexerStylerArray _lsArray;
-	URLCtrl _tabSizeVal;
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	LexerStylerArray _lsArray;
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 	std::vector<LangMenuItem> _langList;
 };
 
@@ -157,17 +170,26 @@ public :
 
 private :
 
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 
 class SearchingSubDlg : public StaticDialog
 {
+friend class PreferenceDlg;
 public:
 	SearchingSubDlg() = default;
+	~SearchingSubDlg() {
+		if (_tipInSelThresh != nullptr)
+		{
+			::DestroyWindow(_tipInSelThresh);
+			_tipInSelThresh = nullptr;
+		}
+	};
 
 private:
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	HWND _tipInSelThresh = nullptr;
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class PrintSubDlg : public StaticDialog
@@ -176,7 +198,7 @@ public :
 	PrintSubDlg() = default;
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 	std::vector<generic_string> varList;
 	int _focusedEditCtrl = 0;
 };
@@ -187,8 +209,9 @@ public :
 	BackupSubDlg() = default;
 
 private :
-	void updateBackupGUI();
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	void updateBackupSessionGUI();
+	void updateBackupOnSaveGUI();
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 
@@ -197,8 +220,7 @@ class AutoCompletionSubDlg : public StaticDialog
 public :
 	AutoCompletionSubDlg() = default;
 private :
-	URLCtrl _nbCharVal;
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class MultiInstanceSubDlg : public StaticDialog
@@ -208,11 +230,12 @@ public :
 
 private :
 	const SYSTEMTIME _BTTF_time = {1985, 10, 6, 26, 16, 24, 42, 0};
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class DelimiterSubDlg : public StaticDialog
 {
+friend class PreferenceDlg;
 public :
 	DelimiterSubDlg() = default;
 	~DelimiterSubDlg() {
@@ -227,7 +250,7 @@ private :
 	RECT _closerLabelRect = {};
 	HWND _tip = nullptr;
 
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 	void detectSpace(const char *text2Check, int & nbSp, int & nbTab) const;
 	generic_string getWarningText(size_t nbSp, size_t nbTab) const;
 	void setWarningIfNeed() const;
@@ -239,7 +262,7 @@ public :
 	CloudAndLinkSubDlg() = default;
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class SearchEngineSubDlg : public StaticDialog
@@ -248,7 +271,7 @@ public :
 	SearchEngineSubDlg() = default;
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class PerformanceSubDlg : public StaticDialog
@@ -262,7 +285,7 @@ public :
 	};
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 
 	HWND _largeFileRestrictionTip = nullptr;
 };
@@ -274,18 +297,15 @@ friend class Notepad_plus;
 public :
 	PreferenceDlg() = default;
 
-    void init(HINSTANCE hInst, HWND parent)	{
-        Window::init(hInst, parent);
-	};
-
-    void doDialog(bool isRTL = false) {
-    	if (!isCreated())
+	void doDialog(bool isRTL = false) {
+		if (!isCreated())
 		{
 			create(IDD_PREFERENCE_BOX, isRTL);
-			goToCenter();
+			goToCenter(SWP_SHOWWINDOW | SWP_NOSIZE);
 		}
-	    display();
-    };
+		display();
+	};
+
 	bool renameDialogTitle(const TCHAR *internalName, const TCHAR *newName);
 	
 	int getListSelectedIndex() const {
@@ -297,10 +317,10 @@ public :
 
 	bool goToSection(size_t iPage, intptr_t ctrlID = -1);
 
-	virtual void destroy();
+	void destroy() override;
 
 private :
-	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 	void makeCategoryList();
 	int32_t getIndexFromName(const TCHAR *name) const;
 	void showDialogByIndex(size_t index) const;

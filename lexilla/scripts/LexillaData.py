@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# ScintillaData.py - implemented 2013 by Neil Hodgson neilh@scintilla.org
+# LexillaData.py - implemented 2013 by Neil Hodgson neilh@scintilla.org
 # Released to the public domain.
+# Requires FileGenerator from Scintilla so scintilla must be a peer directory of lexilla.
 
-# Common code used by Scintilla and SciTE for source file regeneration.
-# The ScintillaData object exposes information about Scintilla as properties:
+# Common code used by Lexilla and SciTE for source file regeneration.
+# The LexillaData object exposes information about Lexilla as properties:
 # Version properties
 #     version
 #     versionDotted
@@ -18,17 +19,23 @@
 #
 # Information about lexers and properties defined in lexers
 #     lexFiles
-#         sorted list of lexer files
+#         sorted list of lexer file stems like LexAbaqus
 #     lexerModules
-#         sorted list of module names
+#         sorted list of module names like lmAbaqus
 #     lexerProperties
-#         sorted list of lexer properties
+#         sorted list of lexer properties like lexer.bash.command.substitution
 #     propertyDocuments
 #         dictionary of property documentation { name: document string }
+#         like lexer.bash.special.parameter: Set shell (default is Bash) special parameters.
 #     sclexFromName
-#         dictionary of SCLEX_* IDs { name: SCLEX_ID }
+#         dictionary of SCLEX_* IDs { name: SCLEX_ID } like ave: SCLEX_AVE
 #     fileFromSclex
-#         dictionary of file names { SCLEX_ID: file name }
+#         dictionary of file names { SCLEX_ID: file name } like SCLEX_AU3: LexAU3.cxx
+#     lexersXcode
+#         dictionary of project file UUIDs { file name: [build UUID, file UUID] }
+#         like  LexTCL: [28BA733B24E34D9700272C2D,28BA72C924E34D9100272C2D]
+#     credits
+#         list of names of contributors like Atsuo Ishimoto
 
 # This file can be run to see the data it provides.
 # Requires Python 3.6 or later
@@ -41,24 +48,24 @@ sys.path.append(str(thisPath.parent.parent.parent / "scintilla" / "scripts"))
 
 import FileGenerator
 
-neutralEncoding = "cp437"	# Each byte value is valid in cp437
+neutralEncoding = "iso-8859-1"	# Each byte value is valid in iso-8859-1
 
 def FindModules(lexFile):
     modules = []
     partLine = ""
     with lexFile.open(encoding=neutralEncoding) as f:
         lineNum = 0
-        for l in f.readlines():
+        for line in f.readlines():
             lineNum += 1
-            l = l.rstrip()
-            if partLine or l.startswith("LexerModule"):
-                if ")" in l:
-                    l = partLine + l
-                    original = l
-                    l = l.replace("(", " ")
-                    l = l.replace(")", " ")
-                    l = l.replace(",", " ")
-                    parts = l.split()
+            line = line.rstrip()
+            if partLine or line.startswith("LexerModule"):
+                if ")" in line:
+                    line = partLine + line
+                    original = line
+                    line = line.replace("(", " ")
+                    line = line.replace(")", " ")
+                    line = line.replace(",", " ")
+                    parts = line.split()
                     lexerName = parts[4]
                     if not (lexerName.startswith('"') and lexerName.endswith('"')):
                         print(f"{lexFile}:{lineNum}: Bad LexerModule statement:\n{original}")
@@ -67,12 +74,14 @@ def FindModules(lexFile):
                     modules.append([parts[1], parts[2], lexerName])
                     partLine = ""
                 else:
-                    partLine = partLine + l
+                    partLine = partLine + line
     return modules
 
 def FindLexersInXcode(xCodeProject):
     lines = FileGenerator.ReadFileAsList(xCodeProject)
 
+    # PBXBuildFile section is a list of all buildable files in the project so extract the file basename and
+    # its build and file IDs
     uidsOfBuild = {}
     markersPBXBuildFile = ["Begin PBXBuildFile section", "", "End PBXBuildFile section"]
     for buildLine in lines[FileGenerator.FindSectionInList(lines, markersPBXBuildFile)]:
@@ -84,6 +93,7 @@ def FindLexersInXcode(xCodeProject):
         uid2 = pieces[12]
         uidsOfBuild[filename] = [uid1, uid2]
 
+    # PBXGroup section contains the folders (Lexilla, Lexers, LexLib, ...) so is used to find the lexers
     lexers = {}
     markersLexers = ["/* Lexers */ =", "children", ");"]
     for lexerLine in lines[FileGenerator.FindSectionInList(lines, markersLexers)]:
@@ -113,11 +123,11 @@ knownIrregularProperties = [
 def FindProperties(lexFile):
     properties = {}
     with open(lexFile, encoding=neutralEncoding) as f:
-        for l in f.readlines():
-            if ("GetProperty" in l or "DefineProperty" in l) and "\"" in l:
-                l = l.strip()
-                if not l.startswith("//"):	# Drop comments
-                    propertyName = l.split("\"")[1]
+        for s in f.readlines():
+            if ("GetProperty" in s or "DefineProperty" in s) and "\"" in s:
+                s = s.strip()
+                if not s.startswith("//"):	# Drop comments
+                    propertyName = s.split("\"")[1]
                     if propertyName.lower() == propertyName:
                         # Only allow lower case property names
                         if propertyName in knownIrregularProperties or \
@@ -130,36 +140,36 @@ def FindPropertyDocumentation(lexFile):
     documents = {}
     with lexFile.open(encoding=neutralEncoding) as f:
         name = ""
-        for l in f.readlines():
-            l = l.strip()
-            if "// property " in l:
-                propertyName = l.split()[2]
+        for line in f.readlines():
+            line = line.strip()
+            if "// property " in line:
+                propertyName = line.split()[2]
                 if propertyName.lower() == propertyName:
                     # Only allow lower case property names
                     name = propertyName
                     documents[name] = ""
-            elif "DefineProperty" in l and "\"" in l:
-                propertyName = l.split("\"")[1]
+            elif "DefineProperty" in line and "\"" in line:
+                propertyName = line.split("\"")[1]
                 if propertyName.lower() == propertyName:
                     # Only allow lower case property names
                     name = propertyName
                     documents[name] = ""
             elif name:
-                if l.startswith("//"):
+                if line.startswith("//"):
                     if documents[name]:
                         documents[name] += " "
-                    documents[name] += l[2:].strip()
-                elif l.startswith("\""):
-                    l = l[1:].strip()
-                    if l.endswith(";"):
-                        l = l[:-1].strip()
-                    if l.endswith(")"):
-                        l = l[:-1].strip()
-                    if l.endswith("\""):
-                        l = l[:-1]
+                    documents[name] += line[2:].strip()
+                elif line.startswith("\""):
+                    line = line[1:].strip()
+                    if line.endswith(";"):
+                        line = line[:-1].strip()
+                    if line.endswith(")"):
+                        line = line[:-1].strip()
+                    if line.endswith("\""):
+                        line = line[:-1]
                     # Fix escaped double quotes
-                    l = l.replace("\\\"", "\"")
-                    documents[name] += l
+                    line = line.replace("\\\"", "\"")
+                    documents[name] += line
                 else:
                     name = ""
     for name in list(documents.keys()):
@@ -171,15 +181,15 @@ def FindCredits(historyFile):
     credits = []
     stage = 0
     with historyFile.open(encoding="utf-8") as f:
-        for l in f.readlines():
-            l = l.strip()
-            if stage == 0 and l == "<table>":
+        for line in f.readlines():
+            line = line.strip()
+            if stage == 0 and line == "<table>":
                 stage = 1
-            elif stage == 1 and l == "</table>":
+            elif stage == 1 and line == "</table>":
                 stage = 2
-            if stage == 1 and l.startswith("<td>"):
-                credit = l[4:-5]
-                if "<a" in l:
+            if stage == 1 and line.startswith("<td>"):
+                credit = line[4:-5]
+                if "<a" in line:
                     title, a, rest = credit.partition("<a href=")
                     urlplus, _bracket, end = rest.partition(">")
                     name = end.split("<")[0]
@@ -194,19 +204,19 @@ def FindCredits(historyFile):
 def ciKey(a):
     return str(a).lower()
 
-def SortListInsensitive(l):
-    l.sort(key=ciKey)
+def SortListInsensitive(list):
+    list.sort(key=ciKey)
 
 class LexillaData:
     def __init__(self, scintillaRoot):
         # Discover version information
         self.version = (scintillaRoot / "version.txt").read_text().strip()
-        self.versionDotted = self.version[0] + '.' + self.version[1] + '.' + \
-            self.version[2]
+        self.versionDotted = self.version[0:-2] + '.' + self.version[-2] + '.' + \
+            self.version[-1]
         self.versionCommad = self.versionDotted.replace(".", ", ") + ', 0'
 
         with (scintillaRoot / "doc" / "Lexilla.html").open() as f:
-            self.dateModified = [l for l in f.readlines() if "Date.Modified" in l]\
+            self.dateModified = [d for d in f.readlines() if "Date.Modified" in d]\
                 [0].split('\"')[3]
             # 20130602
             # Lexilla.html

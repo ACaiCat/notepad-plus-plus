@@ -75,18 +75,19 @@ public:
 
 	void init(HINSTANCE hInst, HWND hPere, ScintillaEditView **ppEditView);
 
-    virtual void display(bool toShow = true) const {
-        DockingDlgInterface::display(toShow);
-    };
+	void display(bool toShow = true) const override {
+		DockingDlgInterface::display(toShow);
+	};
 
-	virtual void setBackgroundColor(COLORREF bgColour) {
+	void setBackgroundColor(COLORREF bgColour) override {
 		TreeView_SetBkColor(_treeView.getHSelf(), bgColour);
 		TreeView_SetBkColor(_treeViewSearchResult.getHSelf(), bgColour);
-    };
-	virtual void setForegroundColor(COLORREF fgColour) {
+	};
+
+	void setForegroundColor(COLORREF fgColour) override {
 		TreeView_SetTextColor(_treeView.getHSelf(), fgColour);
 		TreeView_SetTextColor(_treeViewSearchResult.getHSelf(), fgColour);
-    };
+	};
 
     void setParent(HWND parent2set){
         _hParent = parent2set;
@@ -103,18 +104,19 @@ public:
 	void searchFuncAndSwitchView();
 
 protected:
-	virtual intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam);
+	intptr_t CALLBACK run_dlgProc(UINT message, WPARAM wParam, LPARAM lParam) override;
 	HMENU _hPreferencesMenu = NULL;
 
 private:
 	HWND _hToolbarMenu = nullptr;
 	HWND _hSearchEdit = nullptr;
+	HFONT _hFontSearchEdit = nullptr;
 
 	TreeView *_pTreeView = nullptr;
 	TreeView _treeView;
 	TreeView _treeViewSearchResult;
 
-	SCROLLINFO si = {};
+	SCROLLINFO si{};
 	long _findLine = -1;
 	long _findEndLine = -1;
 	HTREEITEM _findItem = nullptr;
@@ -131,7 +133,6 @@ private:
 	FunctionParsersManager _funcParserMgr;
 	std::vector< std::pair<int, int> > _skipZones;
 	std::vector<TreeParams> _treeParams;
-	HIMAGELIST _hTreeViewImaLst = nullptr;
 
 	generic_string parseSubLevel(size_t begin, size_t end, std::vector< generic_string > dataToSearch, intptr_t& foundPos);
 	size_t getBodyClosePos(size_t begin, const TCHAR *bodyOpenSymbol, const TCHAR *bodyCloseSymbol);
@@ -145,4 +146,3 @@ private:
 	void initPreferencesMenu();
 	void showPreferencesMenu();
 };
-

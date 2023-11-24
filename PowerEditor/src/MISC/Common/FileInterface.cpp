@@ -16,17 +16,9 @@
 
 #include <locale>
 #include <codecvt>
+#include <shlwapi.h>
 #include "FileInterface.h"
 #include "Parameters.h"
-
-Win32_IO_File::Win32_IO_File(const char *fname)
-{
-	if (fname)
-	{
-		_path = fname;
-		_hFile = ::CreateFileA(fname, _accessParam, _shareParam, NULL, _dispParam, _attribParam, NULL);
-	}
-}
 
 
 Win32_IO_File::Win32_IO_File(const wchar_t *fname)
@@ -36,7 +28,42 @@ Win32_IO_File::Win32_IO_File(const wchar_t *fname)
 		std::wstring fn = fname;
 		std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 		_path = converter.to_bytes(fn);
-		_hFile = ::CreateFileW(fname, _accessParam, _shareParam, NULL, _dispParam, _attribParam, NULL);
+
+		WIN32_FILE_ATTRIBUTE_DATA attributes_original{};
+		DWORD dispParam = CREATE_ALWAYS;
+		BOOL doesFileExist = ::PathFileExistsW(fname);
+		if (doesFileExist)
+		{
+			// Store the file creation date & attributes for a possible use later...
+			::GetFileAttributesExW(fname, GetFileExInfoStandard, &attributes_original);
+
+			// Check the existence of Alternate Data Streams
+			WIN32_FIND_STREAM_DATA findData;
+			HANDLE hFind = FindFirstStreamW(fname, FindStreamInfoStandard, &findData, 0);
+			if (hFind != INVALID_HANDLE_VALUE) // Alternate Data Streams found
+			{
+				dispParam = TRUNCATE_EXISTING;
+				FindClose(hFind);
+			}
+		}
+
+		_hFile = ::CreateFileW(fname, _accessParam, _shareParam, NULL, dispParam, _attribParam, NULL);
+
+		// Race condition management:
+		//  If file didn't exist while calling PathFileExistsW, but before calling CreateFileW, file is created:  use CREATE_ALWAYS is OK
+		//  If file did exist while calling PathFileExistsW, but before calling CreateFileW, file is deleted:  use TRUNCATE_EXISTING will cause the error
+		if (dispParam == TRUNCATE_EXISTING && _hFile == INVALID_HANDLE_VALUE && ::GetLastError() == ERROR_FILE_NOT_FOUND)
+		{
+			dispParam = CREATE_ALWAYS;
+			_hFile = ::CreateFileW(fname, _accessParam, _shareParam, NULL, dispParam, _attribParam, NULL);
+		}
+
+		if (doesFileExist && (dispParam == CREATE_ALWAYS) && (_hFile != INVALID_HANDLE_VALUE))
+		{
+			// restore back the original creation date & attributes
+			::SetFileTime(_hFile, &(attributes_original.ftCreationTime), NULL, NULL);
+			::SetFileAttributesW(fname, (_attribParam | attributes_original.dwFileAttributes));
+		}
 
 		NppParameters& nppParam = NppParameters::getInstance();
 		if (nppParam.isEndSessionStarted() && nppParam.doNppLogNulContentCorruptionIssue())
@@ -47,7 +74,15 @@ Win32_IO_File::Win32_IO_File(const wchar_t *fname)
 			pathAppend(nppIssueLog, issueFn);
 
 			std::string msg = _path;
-			msg += " is opened.";
+			if (_hFile != INVALID_HANDLE_VALUE)
+			{
+				msg += " is opened.";
+			}
+			else
+			{
+				msg += " failed to open, CreateFileW ErrorCode: ";
+				msg += std::to_string(::GetLastError());
+			}
 			writeLog(nppIssueLog.c_str(), msg.c_str());
 		}
 	}
@@ -96,31 +131,6 @@ void Win32_IO_File::close()
 	}
 }
 
-/*
-int_fast64_t Win32_IO_File::getSize()
-{
-	LARGE_INTEGER r;
-	r.QuadPart = -1;
-
-	if (isOpened())
-		::GetFileSizeEx(_hFile, &r);
-
-	return static_cast<int_fast64_t>(r.QuadPart);
-}
-
-unsigned long Win32_IO_File::read(void *rbuf, unsigned long buf_size)
-{
-	if (!isOpened() || (rbuf == nullptr) || (buf_size == 0))
-		return 0;
-
-	DWORD bytes_read = 0;
-
-	if (::ReadFile(_hFile, rbuf, buf_size, &bytes_read, NULL) == FALSE)
-		return 0;
-
-	return bytes_read;
-}
-*/
 
 bool Win32_IO_File::write(const void *wbuf, size_t buf_size)
 {

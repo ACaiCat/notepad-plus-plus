@@ -50,6 +50,8 @@
 #define MENU 0x01
 #define TOOLBAR 0x02
 
+#define MAIN_EDIT_ZONE true
+
 enum FileTransferMode {
 	TransferClone		= 0x01,
 	TransferMove		= 0x02
@@ -173,7 +175,7 @@ public:
 	bool fileClose(BufferID id = BUFFER_INVALID, int curView = -1);	//use curView to override view to close from
 	bool fileCloseAll(bool doDeleteBackup, bool isSnapshotMode = false);
 	bool fileCloseAllButCurrent();
-	bool fileCloseAllGiven(const std::vector<int>& krvecBufferIndexes);
+	bool fileCloseAllGiven(const std::vector<BufferViewInfo>& krvecBuffer);
 	bool fileCloseAllToLeft();
 	bool fileCloseAllToRight();
 	bool fileCloseAllUnchanged();
@@ -218,7 +220,7 @@ public:
 	void macroPlayback(Macro);
 
     void loadLastSession();
-	bool loadSession(Session & session, bool isSnapshotMode = false, bool shouldLoadFileBrowser = false);
+	bool loadSession(Session & session, bool isSnapshotMode = false, const wchar_t* userCreatedSessionName = nullptr);
 
 	void prepareBufferChangedDialog(Buffer * buffer);
 	void notifyBufferChanged(Buffer * buffer, int mask);
@@ -278,8 +280,8 @@ private:
     DocTabView* _pDocTab = nullptr;
 	DocTabView* _pNonDocTab = nullptr;
 
-    ScintillaEditView _subEditView;
-    ScintillaEditView _mainEditView;
+    ScintillaEditView _subEditView = ScintillaEditView(MAIN_EDIT_ZONE);  // only _mainEditView and _subEditView are MAIN_EDIT_ZONE comparing with other Scintilla controls
+    ScintillaEditView _mainEditView = ScintillaEditView(MAIN_EDIT_ZONE); // only _mainEditView and _subEditView are MAIN_EDIT_ZONE comparing with other Scintilla controls
 	ScintillaEditView _invisibleEditView; // for searches
 	ScintillaEditView _fileEditView;      // for FileManager
     ScintillaEditView* _pEditView = nullptr;
@@ -314,6 +316,10 @@ private:
 	HashFromTextDlg _md5FromTextDlg;
 	HashFromFilesDlg _sha2FromFilesDlg;
 	HashFromTextDlg _sha2FromTextDlg;
+	HashFromFilesDlg _sha1FromFilesDlg;
+	HashFromTextDlg _sha1FromTextDlg;
+	HashFromFilesDlg _sha512FromFilesDlg;
+	HashFromTextDlg _sha512FromTextDlg;
     GoToLineDlg _goToLineDlg;
 	ColumnEditorDlg _colEditorDlg;
 	WordStyleDlg _configStyleDlg;
@@ -411,6 +417,8 @@ private:
 //Document management
 	UCHAR _mainWindowStatus = 0; //For 2 views and user dialog if docked
 	int _activeView = MAIN_VIEW;
+
+	int _multiSelectFlag = 0; // For sktpping current Multi-select comment 
 
 	//User dialog docking
 	void dockUserDlg();
@@ -640,4 +648,7 @@ private:
 	void updateCommandShortcuts();
 
 	HBITMAP generateSolidColourMenuItemIcon(COLORREF colour);
+
+	void clearChangesHistory();
+	void changedHistoryGoTo(int idGoTo);
 };

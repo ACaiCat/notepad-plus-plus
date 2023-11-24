@@ -18,11 +18,11 @@
 #include "localization.h"
 #include "UserDefineDialog.h"
 #include "ScintillaEditView.h"
-#include "Parameters.h"
-#include "resource.h"
+//#include "Parameters.h"
+//#include "resource.h"
 #include "Notepad_plus_msgs.h"
 #include "CustomFileDialog.h"
-#include "Common.h"
+//#include "Common.h"
 
 using namespace std;
 
@@ -108,21 +108,13 @@ intptr_t CALLBACK SharedParametersDialog::run_dlgProc(UINT Message, WPARAM wPara
 
         case WM_CTLCOLOREDIT:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_CTLCOLORDLG:
         case WM_CTLCOLORSTATIC:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_PRINTCLIENT:
@@ -925,9 +917,32 @@ void UserDefineDialog::reloadLangCombo()
 void UserDefineDialog::changeStyle()
 {
     _status = !_status;
-    ::SetDlgItemText(_hSelf, IDC_DOCK_BUTTON, (_status == DOCK)?TEXT("Undock"):TEXT("Dock"));
+    NativeLangSpeaker *pNativeSpeaker = (NppParameters::getInstance()).getNativeLangSpeaker();
+    TiXmlNodeA *targetNode = nullptr;
+    if (pNativeSpeaker->getNativeLangA())
+    {
+        targetNode = (pNativeSpeaker->getNativeLangA())->FirstChildElement("Dialog");
+        if (targetNode)
+            targetNode = targetNode->FirstChildElement("UserDefine");
+    }
+    generic_string dockButtonLabel;
+    generic_string defauleLabel;
+    string idStr;
+    if (_status == DOCK)
+    {
+        defauleLabel = TEXT("Undock");
+        idStr = std::to_string(IDC_UNDOCK_BUTTON);
+    }
+    else
+    {
+        defauleLabel = TEXT("Dock");
+        idStr = std::to_string(IDC_DOCK_BUTTON);
+    }
 
-	auto style = ::GetWindowLongPtr(_hSelf, GWL_STYLE);
+    dockButtonLabel = pNativeSpeaker->getAttrNameByIdStr(defauleLabel.c_str(), targetNode, idStr.c_str());
+    ::SetDlgItemText(_hSelf, IDC_DOCK_BUTTON, dockButtonLabel.c_str());
+
+    auto style = ::GetWindowLongPtr(_hSelf, GWL_STYLE);
     if (!style)
         ::MessageBox(NULL, TEXT("GetWindowLongPtr failed in UserDefineDialog::changeStyle()"), TEXT(""), MB_OK);
 
@@ -1017,15 +1032,15 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
             _ctrlTab.createTabs(_wVector);
             _ctrlTab.display();
 
-            RECT arc;
+            RECT arc{};
             ::GetWindowRect(::GetDlgItem(_hSelf, IDC_IMPORT_BUTTON), &arc);
 
-            POINT p;
+            POINT p{};
             p.x = arc.left;
             p.y = arc.bottom;
             ::ScreenToClient(_hSelf, &p);
 
-            RECT rc;
+            RECT rc{};
             getClientRect(rc);
             rc.top = p.y + 10;
             rc.bottom -= 20;
@@ -1051,14 +1066,14 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
                 if (!(BST_CHECKED == ::SendDlgItemMessage(_hSelf, IDC_UD_PERCENTAGE_SLIDER, BM_GETCHECK, 0, 0)))
                     ::EnableWindow(::GetDlgItem(_hSelf, IDC_UD_PERCENTAGE_SLIDER), FALSE);
             }
-            SCROLLINFO si;
+            SCROLLINFO si{};
             si.cbSize = sizeof(si);
             si.fMask  = SIF_RANGE; //| SIF_PAGE;
             si.nMin   = 0;
             si.nMax   = 0;
             ::SetScrollInfo(_hSelf, SB_VERT, &si, TRUE);
 
-            TCHAR temp[32];
+            TCHAR temp[32] = { '\0' };
             generic_string udlVersion = TEXT("User Defined Language v.");
             udlVersion += _itow(SCE_UDL_VERSION_MAJOR, temp, 10);
             udlVersion += TEXT(".");
@@ -1078,30 +1093,18 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
 
         case WM_CTLCOLOREDIT:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_CTLCOLORLISTBOX:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColor(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColor(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_CTLCOLORDLG:
         case WM_CTLCOLORSTATIC:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_PRINTCLIENT:
@@ -1221,7 +1224,7 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
                         {
                             auto i = ::SendDlgItemMessage(_hSelf, IDC_LANGNAME_COMBO, CB_GETCURSEL, 0, 0);
 							const size_t langNameLen = 256;
-							TCHAR langName[langNameLen + 1];
+							TCHAR langName[langNameLen + 1] = { '\0' };
 							auto cbTextLen = ::SendDlgItemMessage(_hSelf, IDC_LANGNAME_COMBO, CB_GETLBTEXTLEN, i, 0);
 							if (static_cast<size_t>(cbTextLen) > langNameLen)
 								return TRUE;
@@ -1250,14 +1253,14 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
                     {
                         auto i = ::SendDlgItemMessage(_hSelf, IDC_LANGNAME_COMBO, CB_GETCURSEL, 0, 0);
 						const size_t langNameLen = 256;
-						TCHAR langName[langNameLen + 1];
+						TCHAR langName[langNameLen + 1] = { '\0' };
 						auto cbTextLen = ::SendDlgItemMessage(_hSelf, IDC_LANGNAME_COMBO, CB_GETLBTEXTLEN, i, 0);
 						if (static_cast<size_t>(cbTextLen) > langNameLen)
 							return TRUE;
 
 						::SendDlgItemMessage(_hSelf, IDC_LANGNAME_COMBO, CB_GETLBTEXT, i, reinterpret_cast<LPARAM>(langName));
 
-						generic_string strName = pNativeSpeaker->getLocalizedStrFromID("common-name", TEXT("Name: "));
+						generic_string strName = pNativeSpeaker->getLocalizedStrFromID("common-name", TEXT("Name"));
 						generic_string strTitle = pNativeSpeaker->getLocalizedStrFromID("userdefined-title-rename", TEXT("Rename Current Language Name"));
 
                         StringDlg strDlg;
@@ -1309,7 +1312,7 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
                             wParam = IDC_ADDNEW_BUTTON;
 
 
-						generic_string strName = pNativeSpeaker->getLocalizedStrFromID("common-name", TEXT("Name: "));
+						generic_string strName = pNativeSpeaker->getLocalizedStrFromID("common-name", TEXT("Name"));
 						generic_string strTitle = (wParam == IDC_SAVEAS_BUTTON) ?
 							pNativeSpeaker->getLocalizedStrFromID("userdefined-title-save", TEXT("Save Current Language Name As...")) :
 							pNativeSpeaker->getLocalizedStrFromID("userdefined-title-new", TEXT("Create New Language..."));
@@ -1454,7 +1457,7 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
 
              int maxPos = originalHight - _currentHight;
             // Set the vertical scrolling range and page size
-            SCROLLINFO si;
+            SCROLLINFO si{};
             si.cbSize = sizeof(si);
             si.fMask  = SIF_RANGE | SIF_PAGE;
             si.nMin   = 0;
@@ -1520,6 +1523,8 @@ intptr_t CALLBACK UserDefineDialog::run_dlgProc(UINT message, WPARAM wParam, LPA
             }
             ::SetScrollPos(_hSelf, SB_VERT, _yScrollPos, TRUE);
             ::ScrollWindow(_hSelf, 0, oldy-_yScrollPos, NULL, NULL);
+
+            break;
         }
         case NPPM_MODELESSDIALOG :
             return ::SendMessage(_hParent, NPPM_MODELESSDIALOG, wParam, lParam);
@@ -1561,28 +1566,20 @@ intptr_t CALLBACK StringDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 			}
 
 			if (_shouldGotoCenter)
-				goToCenter();
+				goToCenter(SWP_SHOWWINDOW | SWP_NOSIZE);
 
 			return TRUE;
 		}
 
 		case WM_CTLCOLOREDIT:
 		{
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
-			}
-			break;
+			return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
 		}
 
 		case WM_CTLCOLORDLG:
 		case WM_CTLCOLORSTATIC:
 		{
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-			}
-			break;
+			return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
 		}
 
 		case WM_PRINTCLIENT:
@@ -1598,7 +1595,7 @@ intptr_t CALLBACK StringDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
 		{
 			if (NppDarkMode::isEnabled())
 			{
-				RECT rc = {};
+				RECT rc{};
 				getClientRect(rc);
 				::FillRect(reinterpret_cast<HDC>(wParam), &rc, NppDarkMode::getDarkerBackgroundBrush());
 				return TRUE;
@@ -1618,8 +1615,7 @@ intptr_t CALLBACK StringDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM)
             {
                 case IDOK :
                 {
-                    TCHAR tmpName[langNameLenMax];
-                    tmpName[0] = '\0';
+                    TCHAR tmpName[langNameLenMax] = { '\0' };
                     ::GetDlgItemText(_hSelf, IDC_STRING_EDIT, tmpName, langNameLenMax);
                     _textValue = tmpName;
                     ::EndDialog(_hSelf, reinterpret_cast<intptr_t>(_textValue.c_str()));
@@ -1684,7 +1680,7 @@ LRESULT StringDlg::customEditProc(HWND hEdit, UINT msg, WPARAM wParam, LPARAM lP
 	return CallWindowProc(pSelf->_oldEditProc, hEdit, msg, wParam, lParam);
 }
 
-bool StringDlg::isAllowed(const generic_string & txt)
+bool StringDlg::isAllowed([[maybe_unused]] const generic_string & txt)
 {
 #ifndef __MINGW32__
 	for (auto ch : txt)
@@ -1703,7 +1699,7 @@ void StringDlg::HandlePaste(HWND hEdit)
 		HANDLE hClipboardData = GetClipboardData(CF_UNICODETEXT);
 		if (NULL != hClipboardData)
 		{
-			LPTSTR pszText = reinterpret_cast<LPTSTR>(GlobalLock(hClipboardData));
+			LPTSTR pszText = static_cast<LPTSTR>(GlobalLock(hClipboardData));
 			if (NULL != pszText && isAllowed(pszText))
 			{
 				SendMessage(hEdit, EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(pszText));
@@ -1749,7 +1745,7 @@ intptr_t CALLBACK StylerDlg::dlgProc(HWND hwnd, UINT message, WPARAM wParam, LPA
             Style & style = SharedParametersDialog::_pUserLang->_styles.getStyler(dlg->_stylerIndex);
 
             // move dialog over UDL GUI (position 0,0 of UDL window) so it wouldn't cover the code
-            RECT wrc;
+            RECT wrc{};
             ::GetWindowRect(dlg->_parent, &wrc);
             wrc.left = wrc.left < 0 ? 200 : wrc.left;   // if outside of visible area
             wrc.top = wrc.top < 0 ? 200 : wrc.top;
@@ -1826,30 +1822,18 @@ intptr_t CALLBACK StylerDlg::dlgProc(HWND hwnd, UINT message, WPARAM wParam, LPA
 
         case WM_CTLCOLOREDIT:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColorSofter(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_CTLCOLORLISTBOX:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColor(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColor(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_CTLCOLORDLG:
         case WM_CTLCOLORSTATIC:
         {
-            if (NppDarkMode::isEnabled())
-            {
-                return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-            }
-            break;
+            return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
         }
 
         case WM_PRINTCLIENT:
@@ -1893,7 +1877,7 @@ intptr_t CALLBACK StylerDlg::dlgProc(HWND hwnd, UINT message, WPARAM wParam, LPA
                             style._fontSize = -1;
                         else
                         {
-                            TCHAR *finStr;
+                            TCHAR *finStr = nullptr;
                             style._fontSize = wcstol(intStr, &finStr, 10);
                             if (*finStr != '\0')
                                 style._fontSize = -1;

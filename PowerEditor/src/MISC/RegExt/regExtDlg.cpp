@@ -13,7 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#include "Common.h"
+
 #include "regExtDlg.h"
 #include "resource.h"
 #include "Parameters.h"
@@ -109,20 +109,12 @@ intptr_t CALLBACK RegExtDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lPa
 
 		case WM_CTLCOLORLISTBOX:
 		{
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorListbox(wParam, lParam);
-			}
-			break;
+			return NppDarkMode::onCtlColorListbox(wParam, lParam);
 		}
 
 		case WM_CTLCOLORDLG:
 		{
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
-			}
-			break;
+			return NppDarkMode::onCtlColorDarker(reinterpret_cast<HDC>(wParam));
 		}
 
 		case WM_CTLCOLORSTATIC:
@@ -136,12 +128,7 @@ intptr_t CALLBACK RegExtDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lPa
 			{
 				return NppDarkMode::onCtlColorDarkerBGStaticText(hdcStatic, nppParam.isAdmin());
 			}
-
-			if (NppDarkMode::isEnabled())
-			{
-				return NppDarkMode::onCtlColorDarker(hdcStatic);
-			}
-			return FALSE;
+			return NppDarkMode::onCtlColorDarker(hdcStatic);
 		}
 
 		case WM_PRINTCLIENT:
@@ -326,6 +313,7 @@ intptr_t CALLBACK RegExtDlg::run_dlgProc(UINT Message, WPARAM wParam, LPARAM lPa
 			}
 
 			// break; // no break here
+			[[fallthrough]];
 		}
 
 		default :
@@ -339,16 +327,16 @@ void RegExtDlg::getRegisteredExts()
 	int nbRegisteredKey = getNbSubKey(HKEY_CLASSES_ROOT);
 	for (int i = 0 ; i < nbRegisteredKey ; ++i)
 	{
-		TCHAR extName[extNameLen];
+		TCHAR extName[extNameLen]{};
 		//FILETIME fileTime;
 		int extNameActualLen = extNameLen;
 		int res = ::RegEnumKeyEx(HKEY_CLASSES_ROOT, i, extName, reinterpret_cast<LPDWORD>(&extNameActualLen), nullptr, nullptr, nullptr, nullptr);
 		if ((res == ERROR_SUCCESS) && (extName[0] == '.'))
 		{
 			//TCHAR valName[extNameLen];
-			TCHAR valData[extNameLen];
+			TCHAR valData[extNameLen] = { '\0' };
 			DWORD valDataLen = extNameLen * sizeof(TCHAR);
-			DWORD valType;
+			DWORD valType = 0;
 			HKEY hKey2Check;
 			extNameActualLen = extNameLen;
 			::RegOpenKeyEx(HKEY_CLASSES_ROOT, extName, 0, KEY_ALL_ACCESS, &hKey2Check);
@@ -372,14 +360,14 @@ void RegExtDlg::getDefSupportedExts()
 void RegExtDlg::addExt(TCHAR *ext)
 {
 	HKEY  hKey;
-	DWORD dwDisp;
+	DWORD dwDisp = 0;
 	long  nRet;
 
 	nRet = ::RegCreateKeyEx(HKEY_CLASSES_ROOT, ext, 0, nullptr, 0, KEY_ALL_ACCESS, nullptr, &hKey, &dwDisp);
 
 	if (nRet == ERROR_SUCCESS)
 	{
-		TCHAR valData[MAX_PATH];
+		TCHAR valData[MAX_PATH] = { '\0' };
 		DWORD valDataLen = MAX_PATH * sizeof(TCHAR);
 
 		if (dwDisp == REG_OPENED_EXISTING_KEY)
@@ -388,7 +376,7 @@ void RegExtDlg::addExt(TCHAR *ext)
 			if (res == ERROR_SUCCESS)
 				::RegSetValueEx(hKey, nppBackup, 0, REG_SZ, reinterpret_cast<LPBYTE>(valData), valDataLen);
 		}
-		::RegSetValueEx(hKey, nullptr, 0, REG_SZ, reinterpret_cast<const BYTE *>(nppName), (lstrlen(nppName) + 1) * sizeof(TCHAR));
+		::RegSetValueEx(hKey, nullptr, 0, REG_SZ, reinterpret_cast<const BYTE *>(nppName), static_cast<DWORD>((lstrlen(nppName) + 1) * sizeof(TCHAR)));
 
 		::RegCloseKey(hKey);
 	}
@@ -411,9 +399,9 @@ bool RegExtDlg::deleteExts(const TCHAR *ext2Delete)
 	}
 	else
 	{
-		TCHAR valData[extNameLen];
+		TCHAR valData[extNameLen] = { '\0' };
 		DWORD valDataLen = extNameLen*sizeof(TCHAR);
-		DWORD valType;
+		DWORD valType = 0;
 		int res = ::RegQueryValueEx(hKey, nppBackup, nullptr, &valType, (LPBYTE)valData, &valDataLen);
 
 		if (res == ERROR_SUCCESS)
@@ -432,8 +420,8 @@ bool RegExtDlg::deleteExts(const TCHAR *ext2Delete)
 void RegExtDlg::writeNppPath()
 {
 	HKEY  hKey, hRootKey;
-	DWORD dwDisp;
-	long  nRet;
+	DWORD dwDisp = 0;
+	long  nRet = 0;
 	generic_string regStr(nppName);
 	regStr += TEXT("\\shell\\open\\command");
 
@@ -446,17 +434,17 @@ void RegExtDlg::writeNppPath()
 		{
 			// Write the value for new document
 			::RegOpenKeyEx(HKEY_CLASSES_ROOT, nppName, 0, KEY_ALL_ACCESS, &hRootKey);
-			::RegSetValueEx(hRootKey, nullptr, 0, REG_SZ, (LPBYTE)nppDoc, (lstrlen(nppDoc)+1)*sizeof(TCHAR));
+			::RegSetValueEx(hRootKey, nullptr, 0, REG_SZ, (LPBYTE)nppDoc, static_cast<DWORD>((lstrlen(nppDoc) + 1) * sizeof(TCHAR)));
 			RegCloseKey(hRootKey);
 
-			TCHAR nppPath[MAX_PATH];
+			TCHAR nppPath[MAX_PATH] = { '\0' };
 			::GetModuleFileName(_hInst, nppPath, MAX_PATH);
 
 			TCHAR nppPathParam[MAX_PATH] = TEXT("\""); 
 			wcscat_s(nppPathParam, nppPath);
 			wcscat_s(nppPathParam, TEXT("\" \"%1\""));
 
-			::RegSetValueEx(hKey, nullptr, 0, REG_SZ, (LPBYTE)nppPathParam, (lstrlen(nppPathParam)+1)*sizeof(TCHAR));
+			::RegSetValueEx(hKey, nullptr, 0, REG_SZ, (LPBYTE)nppPathParam, static_cast<DWORD>((lstrlen(nppPathParam) + 1) * sizeof(TCHAR)));
 		}
 		RegCloseKey(hKey);
 	}
@@ -470,14 +458,14 @@ void RegExtDlg::writeNppPath()
 	{
 		//if (dwDisp == REG_CREATED_NEW_KEY)
 		{
-			TCHAR nppPath[MAX_PATH];
+			TCHAR nppPath[MAX_PATH] = { '\0' };
 			::GetModuleFileName(_hInst, nppPath, MAX_PATH);
 
 			TCHAR nppPathParam[MAX_PATH] = TEXT("\"");
 			wcscat_s(nppPathParam, nppPath);
 			wcscat_s(nppPathParam, TEXT("\",0"));
 
-			::RegSetValueEx(hKey, nullptr, 0, REG_SZ, (LPBYTE)nppPathParam, (lstrlen(nppPathParam)+1)*sizeof(TCHAR));
+			::RegSetValueEx(hKey, nullptr, 0, REG_SZ, (LPBYTE)nppPathParam, static_cast<DWORD>((lstrlen(nppPathParam) + 1) * sizeof(TCHAR)));
 		}
 		RegCloseKey(hKey);
 	}

@@ -1,5 +1,5 @@
 // This file is part of Notepad++ project
-// Copyright (C)2021 Don HO <don.h@free.fr>
+// Copyright (C)2023 Don HO <don.h@free.fr>
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -19,12 +19,14 @@
 //
 // Notepad++ version: begin
 //
-#define NOTEPAD_PLUS_VERSION TEXT("Notepad++ v8.4.9")
+#define NOTEPAD_PLUS_VERSION TEXT("Notepad++ v8.6")
 
 // should be X.Y : ie. if VERSION_DIGITALVALUE == 4, 7, 1, 0 , then X = 4, Y = 71
 // ex : #define VERSION_VALUE TEXT("5.63\0")
-#define VERSION_VALUE TEXT("8.49\0")
-#define VERSION_DIGITALVALUE 8, 4, 9, 0
+#define VERSION_INTERNAL_VALUE TEXT("8.6\0")
+
+#define VERSION_PRODUCT_VALUE TEXT("8.6\0")
+#define VERSION_DIGITALVALUE 8, 6, 0, 0
 
 // Notepad++ version: end
 
@@ -418,6 +420,9 @@
 #define MARKER_PLUGINS          1
 #define MARKER_PLUGINS_LIMIT   15
 
+#define INDICATOR_PLUGINS          9  // indicators 8 and below are reserved by Notepad++ (URL_INDIC=8)
+#define INDICATOR_PLUGINS_LIMIT   20  // indicators 21 and up are reserved by Notepad++ (SCE_UNIVERSAL_FOUND_STYLE_EXT5=21)
+
 
 
 //#define IDM 40000
@@ -517,9 +522,9 @@
 //#define IDD_STYLER_DLG    2200
 //#define IDD_GLOBAL_STYLER_DLG    2300
 
-#define IDD_VALUE_DLG       2400
-#define IDC_VALUE_STATIC  2401
-#define IDC_VALUE_EDIT      2402
+//#define IDD_VALUE_DLG       2400
+//#define IDC_VALUE_STATIC  2401
+//#define IDC_VALUE_EDIT      2402
 
 #define IDD_BUTTON_DLG       2410
 #define IDC_RESTORE_BUTTON  2411
@@ -606,7 +611,7 @@
 	#define NPPM_INTERNAL_SETTING_TAB_SIZE              (NOTEPADPLUS_USER_INTERNAL + 30)
 	#define NPPM_INTERNAL_RELOADSTYLERS                 (NOTEPADPLUS_USER_INTERNAL + 31)
 	#define NPPM_INTERNAL_DOCORDERCHANGED               (NOTEPADPLUS_USER_INTERNAL + 32)
-	#define NPPM_INTERNAL_SETMULTISELCTION              (NOTEPADPLUS_USER_INTERNAL + 33)
+	//#define NPPM_INTERNAL_SETMULTISELCTION              (NOTEPADPLUS_USER_INTERNAL + 33)
 	#define NPPM_INTERNAL_SCINTILLAFINDEROPENALL        (NOTEPADPLUS_USER_INTERNAL + 34)
 	#define NPPM_INTERNAL_RECENTFILELIST_UPDATE         (NOTEPADPLUS_USER_INTERNAL + 35)
 	#define NPPM_INTERNAL_RECENTFILELIST_SWITCH         (NOTEPADPLUS_USER_INTERNAL + 36)
@@ -622,7 +627,7 @@
 	#define NPPM_INTERNAL_EXPORTFUNCLISTANDQUIT         (NOTEPADPLUS_USER_INTERNAL + 46)
 	#define NPPM_INTERNAL_PRNTANDQUIT                   (NOTEPADPLUS_USER_INTERNAL + 47)
 	#define NPPM_INTERNAL_SAVEBACKUP        		    (NOTEPADPLUS_USER_INTERNAL + 48)
-	#define NPPM_INTERNAL_STOPMONITORING                (NOTEPADPLUS_USER_INTERNAL + 49) // Used by Monitoring feature
+	#define NPPM_INTERNAL_STOPMONITORING                (NOTEPADPLUS_USER_INTERNAL + 49)  // Used by Monitoring feature
 	#define NPPM_INTERNAL_EDGEBACKGROUND                (NOTEPADPLUS_USER_INTERNAL + 50)
 	#define NPPM_INTERNAL_EDGEMULTISETSIZE              (NOTEPADPLUS_USER_INTERNAL + 51)
 	#define NPPM_INTERNAL_UPDATECLICKABLELINKS          (NOTEPADPLUS_USER_INTERNAL + 52)
@@ -644,6 +649,13 @@
 	#define NPPM_INTERNAL_CLEANSMARTHILITING            (NOTEPADPLUS_USER_INTERNAL + 68)
 	#define NPPM_INTERNAL_CLEANBRACEMATCH               (NOTEPADPLUS_USER_INTERNAL + 69)
 	#define NPPM_INTERNAL_WINDOWSSESSIONEXIT            (NOTEPADPLUS_USER_INTERNAL + 70)
+	#define NPPM_INTERNAL_RESTOREFROMTRAY               (NOTEPADPLUS_USER_INTERNAL + 71)
+	#define NPPM_INTERNAL_SETNPC                        (NOTEPADPLUS_USER_INTERNAL + 72)
+	#define NPPM_INTERNAL_NPCFORMCHANGED                (NOTEPADPLUS_USER_INTERNAL + 73)
+	#define NPPM_INTERNAL_NPCLAUNCHSTYLECONF            (NOTEPADPLUS_USER_INTERNAL + 74)
+	#define NPPM_INTERNAL_CLOSEDOC                      (NOTEPADPLUS_USER_INTERNAL + 75)
+	#define NPPM_INTERNAL_EXTERNALLEXERBUFFER           (NOTEPADPLUS_USER_INTERNAL + 76)
+	#define NPPM_INTERNAL_CHECKUNDOREDOSTATE            (NOTEPADPLUS_USER_INTERNAL + 77)
 
 // See Notepad_plus_msgs.h
 //#define NOTEPADPLUS_USER   (WM_USER + 1000)

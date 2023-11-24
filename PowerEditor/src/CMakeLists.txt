@@ -57,7 +57,9 @@ SET(projIncludDir	../../scintilla/include/
 					./WinControls/FileBrowser/
 					./WinControls/ReadDirectoryChanges/
 					./MISC/md5/
+					./MISC/sha1/
 					./MISC/sha2/
+					./MISC/sha512/
 					./WinControls/PluginsAdmin/
 					./json/)
 
@@ -67,7 +69,10 @@ SET(src_files
 			./DarkMode/DarkMode.cpp
 			./MISC/Common/verifySignedfile.cpp
 			./MISC/md5/md5Dlgs.cpp
+			./MISC/sha1/calc_sha1.cpp
+			./MISC/sha1/sha1.cpp
 			./MISC/sha2/sha-256.cpp
+			./MISC/sha512/sha512.cpp
 			./NppDarkMode.cpp
 			./MISC/Process/Processus.cpp
 			./WinControls/AboutDlg/AboutDlg.cpp
@@ -205,7 +210,10 @@ SET(include_files
 			./MISC/md5/md5.h
 			./MISC/md5/md5Dlgs.h
 			./MISC/md5/md5Dlgs_rc.h
+			./MISC/sha1/calc_sha1.h
+			./MISC/sha1/sha1.h
 			./MISC/sha2/sha-256.h
+			./MISC/sha512/sha512.h
 			./NppDarkMode.h
 			./ScintillaComponent/columnEditor_rc.h
 			./ScintillaComponent/FindReplaceDlg_rc.h
@@ -380,18 +388,18 @@ SET(rcFiles
 
 IF (WIN32)
 	SET(option WIN32)
-	SET(win32_LIBRARIES comctl32 shlwapi dbghelp version crypt32 wintrust sensapi wininet imm32 msimg32 uxtheme)
+	SET(win32_LIBRARIES comctl32 shlwapi dbghelp version crypt32 wintrust sensapi wininet imm32 msimg32 uxtheme dwmapi)
 	set(CMAKE_CXX_STANDARD 20)
 if ( MSVC )
 	#do not use for mingw builds
 	SET(CMAKE_CXX_FLAGS "/EHa /MP /W4")
-	SET(defs -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0600 -D_USE_64BIT_TIME_T -DTIXML_USE_STL -DTIXMLA_USE_STL -D_CRT_NONSTDC_NO_DEPRECATE -D_CRT_SECURE_NO_WARNINGS -D_CRT_NON_CONFORMING_SWPRINTFS )
+	SET(defs -DUNICODE -D_UNICODE -D_WIN32_WINNT=_WIN32_WINNT_VISTA -D_USE_64BIT_TIME_T -DTIXML_USE_STL -DTIXMLA_USE_STL -DNOMINMAX -DOEMRESOURCE -D_CRT_NONSTDC_NO_DEPRECATE -D_CRT_SECURE_NO_WARNINGS -D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING )
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 else ( MSVC )
 	# For possible MinGW compilation
 	SET(CMAKE_CXX_FLAGS "-include../gcc/gcc-fixes.h -std=c++20 -fpermissive -municode")
-	SET(defs -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0600 -D_USE_64BIT_TIME_T -DTIXML_USE_STL -DTIXMLA_USE_STL )
+	SET(defs -DUNICODE -D_UNICODE -D_WIN32_WINNT=_WIN32_WINNT_VISTA -D_USE_64BIT_TIME_T -DTIXML_USE_STL -DTIXMLA_USE_STL -DNOMINMAX -DOEMRESOURCE)
 endif ( MSVC )
 ENDIF (WIN32)
 

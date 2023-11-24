@@ -46,25 +46,28 @@ MenuPosition menuPos[] = {
 	{ 0,  13, -1, "file-closeMore" },
 	{ 0,  22, -1, "file-recentFiles" },
 
-	{ 1,  10, -1, "edit-insert" },
-	{ 1,  11, -1, "edit-copyToClipboard" },
-	{ 1,  12, -1, "edit-indent" },
-	{ 1,  13, -1, "edit-convertCaseTo" },
-	{ 1,  14, -1, "edit-lineOperations" },
-	{ 1,  15, -1, "edit-comment" },
-	{ 1,  16, -1, "edit-autoCompletion" },
-	{ 1,  17, -1, "edit-eolConversion" },
-	{ 1,  18, -1, "edit-blankOperations" },
-	{ 1,  19, -1, "edit-pasteSpecial" },
-	{ 1,  20, -1, "edit-onSelection" },
+	{ 1,  11, -1, "edit-insert" },
+	{ 1,  12, -1, "edit-copyToClipboard" },
+	{ 1,  13, -1, "edit-indent" },
+	{ 1,  14, -1, "edit-convertCaseTo" },
+	{ 1,  15, -1, "edit-lineOperations" },
+	{ 1,  16, -1, "edit-comment" },
+	{ 1,  17, -1, "edit-autoCompletion" },
+	{ 1,  18, -1, "edit-eolConversion" },
+	{ 1,  19, -1, "edit-blankOperations" },
+	{ 1,  20, -1, "edit-pasteSpecial" },
+	{ 1,  21, -1, "edit-onSelection" },
+	{ 1,  23, -1, "edit-multiSelectALL" },
+	{ 1,  24, -1, "edit-multiSelectNext" },
 
-	{ 2,  18, -1, "search-markAll" },
-	{ 2,  19, -1, "search-markOne" },
-	{ 2,  20, -1, "search-unmarkAll" },
-	{ 2,  21, -1, "search-jumpUp" },
-	{ 2,  22, -1, "search-jumpDown" },
-	{ 2,  23, -1, "search-copyStyledText" },
-	{ 2,  25, -1, "search-bookmark" },
+	{ 2,  18, -1, "search-changeHistory" },
+	{ 2,  20, -1, "search-markAll" },
+	{ 2,  21, -1, "search-markOne" },
+	{ 2,  22, -1, "search-unmarkAll" },
+	{ 2,  23, -1, "search-jumpUp" },
+	{ 2,  24, -1, "search-jumpDown" },
+	{ 2,  25, -1, "search-copyStyledText" },
+	{ 2,  27, -1, "search-bookmark" },
 
 	{ 3,   5, -1, "view-currentFileIn" },
 	{ 3,   7, -1, "view-showSymbol" },
@@ -98,7 +101,9 @@ MenuPosition menuPos[] = {
 	{ 6,   4, -1, "settings-import" },
 
 	{ 7,   0, -1, "tools-md5" },
-	{ 7,   1, -1, "tools-sha256" },
+	{ 7,   1, -1, "tools-sha1" },
+	{ 7,   2, -1, "tools-sha256" },
+	{ 7,   3, -1, "tools-sha512" },
 
 	{ 11,  0, -1, "window-sortby"},
 
@@ -144,14 +149,14 @@ void NativeLangSpeaker::init(TiXmlDocumentA *nativeLangDocRootA, bool loadIfEngl
     }
 }
 
-generic_string NativeLangSpeaker::getSpecialMenuEntryName(const char *entryName) const
+generic_string NativeLangSpeaker::getSubMenuEntryName(const char *nodeName) const
 {
 	if (!_nativeLangA) return TEXT("");
 	TiXmlNodeA *mainMenu = _nativeLangA->FirstChild("Menu");
 	if (!mainMenu) return TEXT("");
 	mainMenu = mainMenu->FirstChild("Main");
 	if (!mainMenu) return TEXT("");
-	TiXmlNodeA *entriesRoot = mainMenu->FirstChild("Entries");
+	TiXmlNodeA *entriesRoot = mainMenu->FirstChild("SubEntries");
 	if (!entriesRoot) return TEXT("");
 
 	WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
@@ -162,11 +167,11 @@ generic_string NativeLangSpeaker::getSpecialMenuEntryName(const char *entryName)
 	{
 		TiXmlElementA *element = childNode->ToElement();
 
-		const char *idName = element->Attribute("idName");
+		const char *idName = element->Attribute("subMenuId");
 		if (idName)
 		{
 			const char *name = element->Attribute("name");
-			if (!strcmp(idName, entryName))
+			if (!strcmp(idName, nodeName))
 			{
 				return wmc.char2wchar(name, _nativeLangEncoding);
 			}
@@ -280,6 +285,43 @@ MenuPosition & getMenuPosition(const char *id)
 	}
 	return menuPos[nbSubMenuPos-1];
 }
+
+// Get string from map.
+// If string not found, get string from menu, then put it into map for the next use.
+void NativeLangSpeaker::getMainMenuEntryName(std::wstring& dest, HMENU hMenu, const char* menuId, const wchar_t* defaultDest)
+{
+	const auto iter = _shortcutMenuEntryNameMap.find(menuId);
+	if (iter == _shortcutMenuEntryNameMap.end())
+	{
+		MenuPosition& menuPos = getMenuPosition(menuId);
+		if (menuPos._x != -1 && menuPos._y == -1 && menuPos._z == -1)
+		{
+			wchar_t str[MAX_PATH];
+			GetMenuString(hMenu, menuPos._x, str, MAX_PATH, MF_BYPOSITION);
+			dest = str;
+			dest.erase(std::remove(dest.begin(), dest.end(), '&'), dest.end());
+			_shortcutMenuEntryNameMap[menuId] = dest;
+
+		}
+		else
+		{
+			if (strcmp(menuId, "about") == 0)
+			{
+				dest = getShortcutMapperLangStr("AboutCategory", defaultDest);
+			}
+			else
+			{
+				_shortcutMenuEntryNameMap[menuId] = defaultDest;
+				dest = defaultDest;
+			}
+		}
+	}
+	else
+	{
+		dest = iter->second;
+	}
+}
+
 
 void NativeLangSpeaker::changeMenuLang(HMENU menuHandle)
 {
@@ -443,7 +485,7 @@ void NativeLangSpeaker::changeLangTabContextMenu(HMENU hCM)
 	}
 }
 
-void NativeLangSpeaker::changeLangTabDrapContextMenu(HMENU hCM)
+void NativeLangSpeaker::changeLangTabDropContextMenu(HMENU hCM)
 {
 	const int POS_GO2VIEW = 0;
 	const int POS_CLONE2VIEW = 1;
@@ -465,10 +507,10 @@ void NativeLangSpeaker::changeLangTabDrapContextMenu(HMENU hCM)
 			{
 				TiXmlElementA *element = childNode->ToElement();
 				int ordre;
-				element->Attribute("CMID", &ordre);
-				if (ordre == 5)
+				element->Attribute("CMDID", &ordre);
+				if (ordre == IDM_VIEW_GOTO_ANOTHER_VIEW)
 					goToViewA = element->Attribute("name");
-				else if (ordre == 6)
+				else if (ordre == IDM_VIEW_CLONE_TO_ANOTHER_VIEW)
 					cloneToViewA = element->Attribute("name");
 			}
 		}
@@ -489,6 +531,33 @@ void NativeLangSpeaker::changeLangTabDrapContextMenu(HMENU hCM)
 	}
 }
 
+void NativeLangSpeaker::changeLangTrayIconContexMenu(HMENU hCM)
+{
+	if (!_nativeLangA) return;
+
+	TiXmlNodeA *tryIconMenu = _nativeLangA->FirstChild("Menu");
+	if (!tryIconMenu) return;
+
+	tryIconMenu = tryIconMenu->FirstChild("TrayIcon");
+	if (!tryIconMenu) return;
+
+	WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
+
+	for (TiXmlNodeA *childNode = tryIconMenu->FirstChildElement("Item");
+		childNode ;
+		childNode = childNode->NextSibling("Item") )
+	{
+		TiXmlElementA *element = childNode->ToElement();
+		int id;
+		const char *sentinel = element->Attribute("id", &id);
+		const char *name = element->Attribute("name");
+		if (sentinel && (name && name[0]))
+		{
+			const wchar_t *nameW = wmc.char2wchar(name, _nativeLangEncoding);
+			::ModifyMenu(hCM, id, MF_BYCOMMAND, id, nameW);
+		}
+	}
+}
 
 void NativeLangSpeaker::changeConfigLang(HWND hDlg)
 {
@@ -654,8 +723,16 @@ void NativeLangSpeaker::changeUserDefineLang(UserDefineDialog *userDefineDlg)
 				HWND hItem = ::GetDlgItem(hDlg, id);
 				if (hItem)
 				{
-					const wchar_t *nameW = wmc.char2wchar(name, _nativeLangEncoding);
-					::SetWindowText(hItem, nameW);
+					if (id == IDC_DOCK_BUTTON && userDefineDlg->isDocked())
+					{
+						generic_string name = getAttrNameByIdStr(TEXT("Undock"), userDefineDlgNode, std::to_string(IDC_UNDOCK_BUTTON).c_str());
+						::SetWindowText(hItem, name.c_str());
+					}
+					else
+					{
+						const wchar_t *nameW = wmc.char2wchar(name, _nativeLangEncoding);
+						::SetWindowText(hItem, nameW);
+					}
 				}
 			}
 		}
@@ -702,6 +779,8 @@ void NativeLangSpeaker::changeUserDefineLang(UserDefineDialog *userDefineDlg)
 			}
 		}
 	}
+
+	userDefineDlg->redraw();
 }
 
 void NativeLangSpeaker::changeFindReplaceDlgLang(FindReplaceDlg & findReplaceDlg)
@@ -1006,9 +1085,7 @@ void NativeLangSpeaker::changeShortcutLang()
 				CommandShortcut & csc = mainshortcuts[index];
 				if (csc.getID() == (unsigned long)id) 
 				{
-					WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
-					const wchar_t * nameW = wmc.char2wchar(name, _nativeLangEncoding);
-					csc.setName(nameW);
+					csc.setName(name);
 				}
 			}
 		}
@@ -1036,10 +1113,7 @@ void NativeLangSpeaker::changeShortcutLang()
 			{
 				const char *name = element->Attribute("name");
 				ScintillaKeyMap & skm = scinshortcuts[index];
-
-				WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
-				const wchar_t * nameW = wmc.char2wchar(name, _nativeLangEncoding);
-				skm.setName(nameW);
+				skm.setName(name);
 			}
 		}
 	}
@@ -1240,14 +1314,20 @@ bool NativeLangSpeaker::getMsgBoxLang(const char *msgBoxTagName, generic_string 
 	return false;
 }
 
-generic_string NativeLangSpeaker::getFileBrowserLangMenuStr(int cmdID, const TCHAR *defaultStr) const
+generic_string NativeLangSpeaker::getDlgLangMenuStr(const char* firstLevelNodeName, const char* secondLevelNodeName, int cmdID, const TCHAR* defaultStr) const
 {
 	if (!_nativeLangA) return defaultStr;
 
-	TiXmlNodeA *targetNode = _nativeLangA->FirstChild(FOLDERASWORKSPACE_NODE);
+	TiXmlNodeA *targetNode = _nativeLangA->FirstChild(firstLevelNodeName);
 	if (!targetNode) return defaultStr;
 
-	targetNode = targetNode->FirstChild("Menus");
+	if (secondLevelNodeName && secondLevelNodeName[0])
+	{
+		targetNode = targetNode->FirstChild(secondLevelNodeName);
+		if (!targetNode) return defaultStr;
+	}
+	
+	targetNode = targetNode->FirstChild("Menu");
 	if (!targetNode) return defaultStr;
 
 	const char *name = NULL;
@@ -1327,6 +1407,29 @@ generic_string NativeLangSpeaker::getAttrNameStr(const TCHAR *defaultStr, const 
 	{
 		WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
 		return wmc.char2wchar(name, _nativeLangEncoding);
+	}
+	return defaultStr;
+}
+
+	generic_string NativeLangSpeaker::getAttrNameByIdStr(const TCHAR *defaultStr, TiXmlNodeA *targetNode, const char *nodeL1Value, const char *nodeL1Name, const char *nodeL2Name) const
+{
+	if (!targetNode) return defaultStr;
+
+	for (TiXmlNodeA *childNode = targetNode->FirstChildElement("Item");
+		childNode;
+		childNode = childNode->NextSibling("Item"))
+	{
+		TiXmlElementA *element = childNode->ToElement();
+		const char *id = element->Attribute(nodeL1Name);
+		if (id && id[0] && !strcmp(id, nodeL1Value))
+		{
+			const char *name = element->Attribute(nodeL2Name);
+			if (name && name[0])
+			{
+				WcharMbcsConvertor& wmc = WcharMbcsConvertor::getInstance();
+				return wmc.char2wchar(name, _nativeLangEncoding);
+			}
+		}
 	}
 	return defaultStr;
 }

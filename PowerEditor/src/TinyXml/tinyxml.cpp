@@ -784,8 +784,7 @@ bool TiXmlDocument::SaveFile( const TCHAR * filename ) const
 		std::unique_ptr<std::string> outputStr = std::make_unique<std::string>();
 		Print(*outputStr, 0);
 		if (!outputStr->empty())
-			file.writeStr(*outputStr);
-		return true;
+			return file.writeStr(*outputStr);
 	}
 
 	return false;
@@ -928,12 +927,12 @@ void TiXmlAttribute::SetDoubleValue( double _value )
 	SetValue (buf);
 }
 
-const int TiXmlAttribute::IntValue() const
+int TiXmlAttribute::IntValue() const
 {
 	return _wtoi (value.c_str ());
 }
 
-const double  TiXmlAttribute::DoubleValue() const
+double  TiXmlAttribute::DoubleValue() const
 {
 	return _wtof(value.c_str ());
 }

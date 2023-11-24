@@ -22,14 +22,14 @@
 #include "NppDarkMode.h"
 #include <memory>
 
-typedef std::vector<generic_string> ParamVector;
+typedef std::vector<std::wstring> ParamVector;
 
 
 namespace
 {
 
 
-void allowWmCopydataMessages(Notepad_plus_Window& notepad_plus_plus, const NppParameters& nppParameters, winVer ver)
+void allowPrivilegeMessages(const Notepad_plus_Window& notepad_plus_plus, winVer winVer)
 {
 	#ifndef MSGFLT_ADD
 	const DWORD MSGFLT_ADD = 1;
@@ -37,39 +37,51 @@ void allowWmCopydataMessages(Notepad_plus_Window& notepad_plus_plus, const NppPa
 	#ifndef MSGFLT_ALLOW
 	const DWORD MSGFLT_ALLOW = 1;
 	#endif
-	// Tell UAC that lower integrity processes are allowed to send WM_COPYDATA messages to this process (or window)
-	// This allows opening new files to already opened elevated Notepad++ process via explorer context menu.
-	if (ver >= WV_VISTA || ver == WV_UNKNOWN)
+	// Tell UAC that lower integrity processes are allowed to send WM_COPYDATA (or other) messages to this process (or window)
+	// This (WM_COPYDATA) allows opening new files to already opened elevated Notepad++ process via explorer context menu.
+	if (winVer >= WV_VISTA || winVer == WV_UNKNOWN)
 	{
 		HMODULE hDll = GetModuleHandle(TEXT("user32.dll"));
 		if (hDll)
 		{
 			// According to MSDN ChangeWindowMessageFilter may not be supported in future versions of Windows,
 			// that is why we use ChangeWindowMessageFilterEx if it is available (windows version >= Win7).
-			if (nppParameters.getWinVersion() == WV_VISTA)
+			if (winVer == WV_VISTA)
 			{
 				typedef BOOL (WINAPI *MESSAGEFILTERFUNC)(UINT message,DWORD dwFlag);
 
 				MESSAGEFILTERFUNC func = (MESSAGEFILTERFUNC)::GetProcAddress( hDll, "ChangeWindowMessageFilter" );
 
 				if (func)
+				{
 					func(WM_COPYDATA, MSGFLT_ADD);
+					func(NPPM_INTERNAL_RESTOREFROMTRAY, MSGFLT_ADD);
+				}
 			}
 			else
 			{
 				typedef BOOL (WINAPI *MESSAGEFILTERFUNCEX)(HWND hWnd,UINT message,DWORD action,VOID* pChangeFilterStruct);
 
-				MESSAGEFILTERFUNCEX func = (MESSAGEFILTERFUNCEX)::GetProcAddress( hDll, "ChangeWindowMessageFilterEx" );
+				MESSAGEFILTERFUNCEX funcEx = (MESSAGEFILTERFUNCEX)::GetProcAddress( hDll, "ChangeWindowMessageFilterEx" );
 
-				if (func)
-					func(notepad_plus_plus.getHSelf(), WM_COPYDATA, MSGFLT_ALLOW, NULL );
+				if (funcEx)
+				{
+					funcEx(notepad_plus_plus.getHSelf(), WM_COPYDATA, MSGFLT_ALLOW, NULL);
+					funcEx(notepad_plus_plus.getHSelf(), NPPM_INTERNAL_RESTOREFROMTRAY, MSGFLT_ALLOW, NULL);
+				}
 			}
 		}
 	}
 }
 
 // parseCommandLine() takes command line arguments part string, cuts arguments by using white space as separater.
-// Only white space in double quotes will be kept, such as file path argument or "-settingsDir=" argument (ex.: -settingsDir="c:\my settings\my folder\")
+// Only white space in double quotes will be kept, such as file path argument or '-settingsDir=' argument (ex.: -settingsDir="c:\my settings\my folder\")
+// if '-z' is present, the 3rd argument after -z wont be cut - ie. all the space will also be kept
+// ex.: '-notepadStyleCmdline -z "C:\WINDOWS\system32\NOTEPAD.EXE" C:\my folder\my file with whitespace.txt' will be separated to: 
+// 1. "-notepadStyleCmdline"
+// 2. "-z"
+// 3. "C:\WINDOWS\system32\NOTEPAD.EXE"
+// 4. "C:\my folder\my file with whitespace.txt" 
 void parseCommandLine(const TCHAR* commandLine, ParamVector& paramVector)
 {
 	if (!commandLine)
@@ -80,36 +92,47 @@ void parseCommandLine(const TCHAR* commandLine, ParamVector& paramVector)
 
 	TCHAR* cmdLinePtr = cmdLine;
 
-	bool isInFile = false;
+	bool isBetweenFileNameQuotes = false;
 	bool isStringInArg = false;
 	bool isInWhiteSpace = true;
 
+	int zArg = 0; // for "-z" argument: Causes Notepad++ to ignore the next command line argument (a single word, or a phrase in quotes).
+	              // The only intended and supported use for this option is for the Notepad Replacement syntax.
+
+	bool shouldBeTerminated = false; // If "-z" argument has been found, zArg value will be increased from 0 to 1.
+	                                 // then after processing next argument of "-z", zArg value will be increased from 1 to 2.
+	                                 // when zArg == 2 shouldBeTerminated will be set to true - it will trigger the treatment which consider the rest as a argument, with or without white space(s).
+
 	size_t commandLength = lstrlen(cmdLinePtr);
 	std::vector<TCHAR *> args;
-	for (size_t i = 0; i < commandLength; ++i)
+	for (size_t i = 0; i < commandLength && !shouldBeTerminated; ++i)
 	{
 		switch (cmdLinePtr[i])
 		{
 			case '\"': //quoted filename, ignore any following whitespace
 			{
-				if (!isStringInArg && i > 0 && cmdLinePtr[i - 1] == '=')
+				if (!isStringInArg && !isBetweenFileNameQuotes && i > 0 && cmdLinePtr[i-1] == '=')
 				{
 					isStringInArg = true;
 				}
 				else if (isStringInArg)
 				{
 					isStringInArg = false;
-					//cmdLinePtr[i] = 0;
 				}
-				else if (!isInFile)	//" will always be treated as start or end of param, in case the user forgot to add an space
+				else if (!isBetweenFileNameQuotes)	//" will always be treated as start or end of param, in case the user forgot to add an space
 				{
 					args.push_back(cmdLinePtr + i + 1);	//add next param(since zero terminated original, no overflow of +1)
-					isInFile = true;
+					isBetweenFileNameQuotes = true;
 					cmdLinePtr[i] = 0;
+
+					if (zArg == 1)
+					{
+						++zArg; // zArg == 2
+					}
 				}
-				else if (isInFile)
+				else if (isBetweenFileNameQuotes)
 				{
-					isInFile = false;
+					isBetweenFileNameQuotes = false;
 					//because we dont want to leave in any quotes in the filename, remove them now (with zero terminator)
 					cmdLinePtr[i] = 0;
 				}
@@ -121,16 +144,27 @@ void parseCommandLine(const TCHAR* commandLine, ParamVector& paramVector)
 			case ' ':
 			{
 				isInWhiteSpace = true;
-				if (!isInFile && !isStringInArg)
-					cmdLinePtr[i] = 0;		//zap spaces into zero terminators, unless its part of a filename	
+				if (!isBetweenFileNameQuotes && !isStringInArg)
+				{
+					cmdLinePtr[i] = 0;		//zap spaces into zero terminators, unless its part of a filename
+
+					size_t argsLen = args.size();
+					if (argsLen > 0 && lstrcmp(args[argsLen-1], L"-z") == 0)
+						++zArg; // "-z" argument is found: change zArg value from 0 (initial) to 1
+				}
 			}
 			break;
 
 			default: //default TCHAR, if beginning of word, add it
 			{
-				if (!isInFile && !isStringInArg && isInWhiteSpace)
+				if (!isBetweenFileNameQuotes && !isStringInArg && isInWhiteSpace)
 				{
 					args.push_back(cmdLinePtr + i);	//add next param
+					if (zArg == 2)
+					{
+						shouldBeTerminated = true; // stop the processing, and keep the rest string as it in the vector
+					}
+
 					isInWhiteSpace = false;
 				}
 			}
@@ -166,7 +200,7 @@ bool isInList(const TCHAR *token2Find, ParamVector& params, bool eraseArg = true
 	return false;
 }
 
-bool getParamVal(TCHAR c, ParamVector & params, generic_string & value)
+bool getParamVal(TCHAR c, ParamVector & params, std::wstring & value)
 {
 	value = TEXT("");
 	size_t nbItems = params.size();
@@ -184,7 +218,7 @@ bool getParamVal(TCHAR c, ParamVector & params, generic_string & value)
 	return false;
 }
 
-bool getParamValFromString(const TCHAR *str, ParamVector & params, generic_string & value)
+bool getParamValFromString(const TCHAR *str, ParamVector & params, std::wstring & value)
 {
 	value = TEXT("");
 	size_t nbItems = params.size();
@@ -192,9 +226,9 @@ bool getParamValFromString(const TCHAR *str, ParamVector & params, generic_strin
 	for (size_t i = 0; i < nbItems; ++i)
 	{
 		const TCHAR * token = params.at(i).c_str();
-		generic_string tokenStr = token;
+		std::wstring tokenStr = token;
 		size_t pos = tokenStr.find(str);
-		if (pos != generic_string::npos && pos == 0)
+		if (pos != std::wstring::npos && pos == 0)
 		{
 			value = (token + lstrlen(str));
 			params.erase(params.begin() + i);
@@ -206,23 +240,24 @@ bool getParamValFromString(const TCHAR *str, ParamVector & params, generic_strin
 
 LangType getLangTypeFromParam(ParamVector & params)
 {
-	generic_string langStr;
+	std::wstring langStr;
 	if (!getParamVal('l', params, langStr))
 		return L_EXTERNAL;
 	return NppParameters::getLangIDFromStr(langStr.c_str());
 }
 
-generic_string getLocalizationPathFromParam(ParamVector & params)
+std::wstring getLocalizationPathFromParam(ParamVector & params)
 {
-	generic_string locStr;
+	std::wstring locStr;
 	if (!getParamVal('L', params, locStr))
 		return TEXT("");
+	locStr = stringToLower(stringReplace(locStr, TEXT("_"), TEXT("-"))); // convert to lowercase format with "-" as separator
 	return NppParameters::getLocPathFromStr(locStr.c_str());
 }
 
 intptr_t getNumberFromParam(char paramName, ParamVector & params, bool & isParamePresent)
 {
-	generic_string numStr;
+	std::wstring numStr;
 	if (!getParamVal(paramName, params, numStr))
 	{
 		isParamePresent = false;
@@ -232,9 +267,9 @@ intptr_t getNumberFromParam(char paramName, ParamVector & params, bool & isParam
 	return static_cast<intptr_t>(_ttoi64(numStr.c_str()));
 }
 
-generic_string getEasterEggNameFromParam(ParamVector & params, unsigned char & type)
+std::wstring getEasterEggNameFromParam(ParamVector & params, unsigned char & type)
 {
-	generic_string EasterEggName;
+	std::wstring EasterEggName;
 	if (!getParamValFromString(TEXT("-qn="), params, EasterEggName))  // get internal easter egg
 	{
 		if (!getParamValFromString(TEXT("-qt="), params, EasterEggName)) // get user quote from cmdline argument
@@ -265,7 +300,7 @@ generic_string getEasterEggNameFromParam(ParamVector & params, unsigned char & t
 
 int getGhostTypingSpeedFromParam(ParamVector & params)
 {
-	generic_string speedStr;
+	std::wstring speedStr;
 	if (!getParamValFromString(TEXT("-qSpeed"), params, speedStr))
 		return -1;
 	
@@ -304,13 +339,13 @@ void doException(Notepad_plus_Window & notepad_plus_plus)
 
 	TCHAR tmpDir[1024];
 	GetTempPath(1024, tmpDir);
-	generic_string emergencySavedDir = tmpDir;
+	std::wstring emergencySavedDir = tmpDir;
 	emergencySavedDir += TEXT("\\Notepad++ RECOV");
 
 	bool res = notepad_plus_plus.emergency(emergencySavedDir);
 	if (res)
 	{
-		generic_string displayText = TEXT("Notepad++ was able to successfully recover some unsaved documents, or nothing to be saved could be found.\r\nYou can find the results at :\r\n");
+		std::wstring displayText = TEXT("Notepad++ was able to successfully recover some unsaved documents, or nothing to be saved could be found.\r\nYou can find the results at :\r\n");
 		displayText += emergencySavedDir;
 		::MessageBox(Notepad_plus_Window::gNppHWND, displayText.c_str(), TEXT("Recovery success"), MB_OK | MB_ICONINFORMATION);
 	}
@@ -344,7 +379,7 @@ void stripIgnoredParams(ParamVector & params)
 
 
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
+int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance*/, _In_ PWSTR pCmdLine, _In_ int /*nShowCmd*/)
 {
 	bool TheFirstOne = true;
 	::SetLastError(NO_ERROR);
@@ -352,8 +387,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 	if (::GetLastError() == ERROR_ALREADY_EXISTS)
 		TheFirstOne = false;
 
-
-	generic_string cmdLineString = pCmdLine ? pCmdLine : _T("");
+	std::wstring cmdLineString = pCmdLine ? pCmdLine : _T("");
 	ParamVector params;
 	parseCommandLine(pCmdLine, params);
 
@@ -390,7 +424,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 	cmdLineParams._easterEggName = getEasterEggNameFromParam(params, cmdLineParams._quoteType);
 	cmdLineParams._ghostTypingSpeed = getGhostTypingSpeedFromParam(params);
 
-	generic_string pluginMessage;
+	std::wstring pluginMessage;
 	if (getParamValFromString(FLAG_PLUGIN_MESSAGE, params, pluginMessage))
 	{
 		if (pluginMessage.length() >= 2)
@@ -414,7 +448,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 
 	nppParameters.setCmdLineString(cmdLineString);
 
-	generic_string path;
+	std::wstring path;
 	if (getParamValFromString(FLAG_SETTINGS_DIR, params, path))
 	{
 		// path could contain double quotes if path contains white space
@@ -425,7 +459,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 		nppParameters.setCmdSettingsDir(path);
 	}
 
-	generic_string titleBarAdditional;
+	std::wstring titleBarAdditional;
 	if (getParamValFromString(FLAG_TITLEBAR_ADD, params, titleBarAdditional))
 	{
 		if (titleBarAdditional.length() >= 2)
@@ -438,7 +472,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 		nppParameters.setTitleBarAdd(titleBarAdditional);
 	}
 
-	generic_string udlName;
+	std::wstring udlName;
 	if (getParamValFromString(FLAG_APPLY_UDL, params, udlName))
 	{
 		if (udlName.length() >= 2)
@@ -497,7 +531,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 			cmdLineParams._isNoSession = true;
 	}
 
-	generic_string quotFileName = TEXT("");
+	std::wstring quotFileName = TEXT("");
     // tell the running instance the FULL path to the new files to load
 	size_t nbFilesToOpen = params.size();
 
@@ -531,38 +565,43 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 			// First of all, destroy static object NppParameters
 			nppParameters.destroyInstance();
 
-			int sw = 0;
+			// Restore the window, bring it to front, etc
+			bool isInSystemTray = ::SendMessage(hNotepad_plus, NPPM_INTERNAL_RESTOREFROMTRAY, 0, 0);
 
-			if (::IsZoomed(hNotepad_plus))
-				sw = SW_MAXIMIZE;
-			else if (::IsIconic(hNotepad_plus))
-				sw = SW_RESTORE;
+			if (!isInSystemTray)
+			{
+				int sw = 0;
 
-			if (sw != 0)
-				::ShowWindow(hNotepad_plus, sw);
+				if (::IsZoomed(hNotepad_plus))
+					sw = SW_MAXIMIZE;
+				else if (::IsIconic(hNotepad_plus))
+					sw = SW_RESTORE;
 
+				if (sw != 0)
+					::ShowWindow(hNotepad_plus, sw);
+			}
 			::SetForegroundWindow(hNotepad_plus);
 
 			if (params.size() > 0)	//if there are files to open, use the WM_COPYDATA system
 			{
 				CmdLineParamsDTO dto = CmdLineParamsDTO::FromCmdLineParams(cmdLineParams);
 
-				COPYDATASTRUCT paramData;
+				COPYDATASTRUCT paramData{};
 				paramData.dwData = COPYDATA_PARAMS;
 				paramData.lpData = &dto;
 				paramData.cbData = sizeof(dto);
 				::SendMessage(hNotepad_plus, WM_COPYDATA, reinterpret_cast<WPARAM>(hInstance), reinterpret_cast<LPARAM>(&paramData));
 
-				COPYDATASTRUCT cmdLineData;
+				COPYDATASTRUCT cmdLineData{};
 				cmdLineData.dwData = COPYDATA_FULL_CMDLINE;
 				cmdLineData.lpData = (void*)cmdLineString.c_str();
-				cmdLineData.cbData = long(cmdLineString.length() + 1) * (sizeof(TCHAR));
+				cmdLineData.cbData = static_cast<DWORD>((cmdLineString.length() + 1) * sizeof(TCHAR));
 				::SendMessage(hNotepad_plus, WM_COPYDATA, reinterpret_cast<WPARAM>(hInstance), reinterpret_cast<LPARAM>(&cmdLineData));
 
-				COPYDATASTRUCT fileNamesData;
+				COPYDATASTRUCT fileNamesData{};
 				fileNamesData.dwData = COPYDATA_FILENAMESW;
 				fileNamesData.lpData = (void *)quotFileName.c_str();
-				fileNamesData.cbData = long(quotFileName.length() + 1) * (sizeof(TCHAR));
+				fileNamesData.cbData = static_cast<DWORD>((quotFileName.length() + 1) * sizeof(TCHAR));
 				::SendMessage(hNotepad_plus, WM_COPYDATA, reinterpret_cast<WPARAM>(hInstance), reinterpret_cast<LPARAM>(&fileNamesData));
 			}
 			return 0;
@@ -572,13 +611,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 	auto upNotepadWindow = std::make_unique<Notepad_plus_Window>();
 	Notepad_plus_Window & notepad_plus_plus = *upNotepadWindow.get();
 
-	generic_string updaterDir = nppParameters.getNppPath();
+	std::wstring updaterDir = nppParameters.getNppPath();
 	updaterDir += TEXT("\\updater\\");
 
-	generic_string updaterFullPath = updaterDir + TEXT("gup.exe");
+	std::wstring updaterFullPath = updaterDir + TEXT("gup.exe");
 
-	generic_string updaterParams = TEXT("-v");
-	updaterParams += VERSION_VALUE;
+	std::wstring updaterParams = TEXT("-v");
+	updaterParams += VERSION_INTERNAL_VALUE;
 
 	bool isUpExist = nppGui._doesExistUpdater = (::PathFileExists(updaterFullPath.c_str()) == TRUE);
 
@@ -630,7 +669,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 		if (doUpdatePluginList)
 		{
 			// Update Plugin List
-			generic_string upPlParams = TEXT("-v"); 
+			std::wstring upPlParams = TEXT("-v"); 
 			upPlParams += notepad_plus_plus.getPluginListVerStr();
 
 			if (nppParameters.archType() == IMAGE_FILE_MACHINE_AMD64)
@@ -658,14 +697,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int)
 		}
 	}
 
-	MSG msg;
+	MSG msg{};
 	msg.wParam = 0;
 	Win32Exception::installHandler();
 	MiniDumper mdump;	//for debugging purposes.
 	try
 	{
 		notepad_plus_plus.init(hInstance, NULL, quotFileName.c_str(), &cmdLineParams);
-		allowWmCopydataMessages(notepad_plus_plus, nppParameters, ver);
+		allowPrivilegeMessages(notepad_plus_plus, ver);
 		bool going = true;
 		while (going)
 		{

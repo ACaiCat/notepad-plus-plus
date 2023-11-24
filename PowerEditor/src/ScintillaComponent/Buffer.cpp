@@ -265,7 +265,17 @@ bool Buffer::checkFileState() // returns true if the status has been changed (it
 	}
 
 	bool isOK = false;
-	if (_currentStatus != DOC_DELETED && !PathFileExists(_fullPathName.c_str()))	//document has been deleted
+	if (_currentStatus == DOC_INACCESSIBLE && !PathFileExists(_fullPathName.c_str()))	//document is absent on its first load - we set readonly and not dirty, and make it be as document which has been deleted
+	{
+		_currentStatus = DOC_DELETED;//DOC_INACCESSIBLE;
+		_isInaccessible = true;
+		_isFileReadOnly = true;
+		_isDirty = false;
+		_timeStamp = {};
+		doNotify(BufferChangeStatus | BufferChangeReadonly | BufferChangeTimestamp);
+		isOK = true;
+	}
+	else if (_currentStatus != DOC_DELETED && !PathFileExists(_fullPathName.c_str()))	//document has been deleted
 	{
 		_currentStatus = DOC_DELETED;
 		_isFileReadOnly = false;
@@ -672,6 +682,9 @@ void FileManager::closeBuffer(BufferID id, ScintillaEditView * identifier)
 // backupFileName is sentinel of backup mode: if it's not NULL, then we use it (load it). Otherwise we use filename
 BufferID FileManager::loadFile(const TCHAR* filename, Document doc, int encoding, const TCHAR* backupFileName, FILETIME fileNameTimestamp)
 {
+	if (!filename)
+		return BUFFER_INVALID;
+
 	//Get file size
 	int64_t fileSize = -1;
 	const TCHAR* pPath = filename;
@@ -754,7 +767,7 @@ BufferID FileManager::loadFile(const TCHAR* filename, Document doc, int encoding
 	if (res)
 	{
 		Buffer* newBuf = new Buffer(this, _nextBufferID, doc, DOC_REGULAR, fullpath, isLargeFile);
-		BufferID id = static_cast<BufferID>(newBuf);
+		BufferID id = newBuf;
 		newBuf->_id = id;
 
 		if (backupFileName != NULL)
@@ -801,8 +814,6 @@ bool FileManager::reloadBuffer(BufferID id)
 	Document doc = buf->getDocument();
 	Utf8_16_Read UnicodeConvertor;
 
-	char* data = new char[blockSize + 8]; // +8 for incomplete multibyte char
-
 	LoadedFileFormat loadedFileFormat;
 	loadedFileFormat._encoding = buf->getEncoding();
 	loadedFileFormat._eolFormat = EolType::unknown;
@@ -811,7 +822,6 @@ bool FileManager::reloadBuffer(BufferID id)
 	buf->setLoadedDirty(false);	// Since the buffer will be reloaded from the disk, and it will be clean (not dirty), we can set _isLoadedDirty false safetly.
 								// Set _isLoadedDirty false before calling "_pscratchTilla->execute(SCI_CLEARALL);" in loadFileData() to avoid setDirty in SCN_SAVEPOINTREACHED / SCN_SAVEPOINTLEFT
 
-
 	//Get file size
 	FILE* fp = _wfopen(buf->getFullPathName(), TEXT("rb"));
 	if (!fp)
@@ -819,6 +829,8 @@ bool FileManager::reloadBuffer(BufferID id)
 	_fseeki64(fp, 0, SEEK_END);
 	int64_t fileSize = _ftelli64(fp);
 	fclose(fp);
+	
+	char* data = new char[blockSize + 8]; // +8 for incomplete multibyte char
 
 	buf->_canNotify = false;	//disable notify during file load, we don't want dirty status to be triggered
 	bool res = loadFileData(doc, fileSize, buf->getFullPathName(), data, &UnicodeConvertor, loadedFileFormat);
@@ -1021,12 +1033,8 @@ bool FileManager::backupCurrentBuffer()
 			}
 
 			// Make sure the backup file is not read only
-			DWORD dwFileAttribs = ::GetFileAttributes(fullpath);
-			if (dwFileAttribs & FILE_ATTRIBUTE_READONLY) // if file is read only, remove read only attribute
-			{
-				dwFileAttribs ^= FILE_ATTRIBUTE_READONLY;
-				::SetFileAttributes(fullpath, dwFileAttribs);
-			}
+			removeReadOnlyFlagFromFileAttributes(fullpath);
+
 
 			if (UnicodeConvertor.openFile(fullpath))
 			{
@@ -1116,7 +1124,7 @@ bool FileManager::deleteBufferBackup(BufferID id)
 
 std::mutex save_mutex;
 
-SavingStatus FileManager::saveBuffer(BufferID id, const TCHAR * filename, bool isCopy)
+SavingStatus FileManager::saveBuffer(BufferID id, const TCHAR* filename, bool isCopy)
 {
 	std::lock_guard<std::mutex> lock(save_mutex);
 
@@ -1137,6 +1145,28 @@ SavingStatus FileManager::saveBuffer(BufferID id, const TCHAR * filename, bool i
 		{
 			::GetLongPathName(fullpath, fullpath, MAX_PATH);
 		}
+	}
+	
+	wchar_t dirDest[MAX_PATH];
+	wcscpy_s(dirDest, MAX_PATH, fullpath);
+	::PathRemoveFileSpecW(dirDest);
+
+	const wchar_t* currentBufFilePath = buffer->getFullPathName();
+	ULARGE_INTEGER freeBytesForUser;
+	 
+	BOOL getFreeSpaceRes = ::GetDiskFreeSpaceExW(dirDest, &freeBytesForUser, nullptr, nullptr);
+	if (getFreeSpaceRes != FALSE)
+	{
+		int64_t fileSize = buffer->getFileLength();
+		if (fileSize >= 0 && lstrcmp(fullpath, currentBufFilePath) == 0) // if file to save does exist, and it's an operation "Save" but not "Save As"
+		{
+			// if file exists and the operation "Save" but not "Save As", its current length should be considered as part of free room space since the file itself will be overrrided 
+			freeBytesForUser.QuadPart += fileSize;
+		}
+
+		// determinate if free space is enough
+		if (freeBytesForUser.QuadPart < buffer->docLength())
+			return SavingStatus::NotEnoughRoom;
 	}
 
 	if (PathFileExists(fullpath))
@@ -1319,7 +1349,7 @@ BufferID FileManager::newEmptyDocument()
 	const NewDocDefaultSettings& ndds = (nppParamInst.getNppGUI()).getNewDocDefaultSettings();
 	newBuf->_lang = ndds._lang;
 
-	BufferID id = static_cast<BufferID>(newBuf);
+	BufferID id = newBuf;
 	newBuf->_id = id;
 	_buffers.push_back(newBuf);
 	++_nbBufs;
@@ -1327,26 +1357,71 @@ BufferID FileManager::newEmptyDocument()
 	return id;
 }
 
-BufferID FileManager::bufferFromDocument(Document doc, bool dontIncrease, bool dontRef)
+BufferID FileManager::newPlaceholderDocument(const TCHAR* missingFilename, int whichOne, const wchar_t* userCreatedSessionName)
 {
 	NppParameters& nppParamInst = NppParameters::getInstance();
-	generic_string newTitle = (nppParamInst.getNativeLangSpeaker())->getLocalizedStrFromID("tab-untitled-string", UNTITLED_STR);
-	TCHAR nb[10];
-	wsprintf(nb, TEXT("%d"), static_cast<int>(nextUntitledNewNumber()));
-	newTitle += nb;
 
-	if (!dontRef)
-		_pscratchTilla->execute(SCI_ADDREFDOCUMENT, 0, doc);	//set reference for FileManager
+	if (!nppParamInst.theWarningHasBeenGiven())
+	{
+		int res = 0;
+		if (userCreatedSessionName)
+		{
+			res = (nppParamInst.getNativeLangSpeaker())->messageBox(
+				"FileInaccessibleUserSession",
+				_pNotepadPlus->_pEditView->getHSelf(),
+				L"Some files from your manually-saved session \"$STR_REPLACE$\" are inaccessible. They can be opened as empty and read-only documents as placeholders.\n\nWould you like to create those placeholders?\n\nNOTE: Choosing not to create the placeholders or closing them later, your manually-saved session will NOT be modified on exit.",
+				L"File inaccessinble",
+				MB_YESNO | MB_APPLMODAL,
+				0,
+				userCreatedSessionName);
+		}
+		else
+		{
+			res = (nppParamInst.getNativeLangSpeaker())->messageBox(
+				"FileInaccessibleDefaultSessionXml",
+				_pNotepadPlus->_pEditView->getHSelf(),
+				L"Some files from your past session are inaccessible. They can be opened as empty and read-only documents as placeholders.\n\nWould you like to create those placeholders?\n\nNOTE: Choosing not to create the placeholders or closing them later, your session WILL BE MODIFIED ON EXIT! We suggest you backup your \"session.xml\" now.",
+				L"File inaccessinble",
+				MB_YESNO | MB_APPLMODAL);
+		}
+
+		nppParamInst.setTheWarningHasBeenGiven(true);
+		nppParamInst.setPlaceHolderEnable(res == IDYES);
+	}
+
+	if (!nppParamInst.isPlaceHolderEnabled())
+		return BUFFER_INVALID;
+
+	BufferID buf = MainFileManager.newEmptyDocument();
+	_pNotepadPlus->loadBufferIntoView(buf, whichOne);
+	buf->setFileName(missingFilename);
+	buf->_currentStatus = DOC_INACCESSIBLE;
+	return buf;
+}
+
+BufferID FileManager::bufferFromDocument(Document doc, bool isMainEditZone)
+{
+	NppParameters& nppParamInst = NppParameters::getInstance();
+	std::wstring newTitle = L"newNonMainEditZoneInvisibleTitle "; // This title is invisible for "Document map", "Find result" or other Scintilla controls other than _mainEditView and _subEditView.
+                                                                  // Its strong length and the space at the end are for preventing the tab name modification from the collision with it.
+
+	if (isMainEditZone) // only _mainEditView or _subEditView is main edit zone, so we count new number of doc only for these 2 scintilla edit views.
+	{
+		newTitle = (nppParamInst.getNativeLangSpeaker())->getLocalizedStrFromID("tab-untitled-string", UNTITLED_STR);
+		wchar_t nb[10];
+		wsprintf(nb, TEXT("%d"), static_cast<int>(nextUntitledNewNumber()));
+		newTitle += nb;
+	}
+
 	Buffer* newBuf = new Buffer(this, _nextBufferID, doc, DOC_UNNAMED, newTitle.c_str(), false);
-	BufferID id = static_cast<BufferID>(newBuf);
+	BufferID id = newBuf;
 	newBuf->_id = id;
 	const NewDocDefaultSettings& ndds = (nppParamInst.getNppGUI()).getNewDocDefaultSettings();
 	newBuf->_lang = ndds._lang;
 	_buffers.push_back(newBuf);
 	++_nbBufs;
 
-	if (!dontIncrease)
-		++_nextBufferID;
+	++_nextBufferID;
 	return id;
 }
 
@@ -1389,8 +1464,11 @@ LangType FileManager::detectLanguageFromTextBegining(const unsigned char *data, 
 			break;
 	}
 
+	if (i == dataLen)
+		return L_TEXT;
+
 	// Create the buffer to need to test
-	const size_t longestLength = 40; // shebangs can be large
+	const size_t longestLength = std::min<size_t>(40, dataLen - i); // shebangs can be large
 	std::string buf2Test = std::string((const char *)data + i, longestLength);
 
 	// Is there a \r or \n in the buffer? If so, truncate it
@@ -1482,21 +1560,24 @@ bool FileManager::loadFileData(Document doc, int64_t fileSize, const TCHAR * fil
 		}
 		else // x64
 		{
-
-			int res = pNativeSpeaker->messageBox("WantToOpenHugeFile",
-				_pNotepadPlus->_pEditView->getHSelf(),
-				TEXT("Opening a huge file of 2GB+ could take several minutes.\nDo you want to open it?"),
-				TEXT("Opening huge file warning"),
-				MB_YESNO | MB_APPLMODAL);
-
-			if (res == IDYES)
+			NppGUI& nppGui = NppParameters::getInstance().getNppGUI();
+			if (!nppGui._largeFileRestriction._suppress2GBWarning) 
 			{
-				// Do nothing
-			}
-			else
-			{
-				fclose(fp);
-				return false;
+				int res = pNativeSpeaker->messageBox("WantToOpenHugeFile",
+					_pNotepadPlus->_pEditView->getHSelf(),
+					TEXT("Opening a huge file of 2GB+ could take several minutes.\nDo you want to open it?"),
+					TEXT("Opening huge file warning"),
+					MB_YESNO | MB_APPLMODAL);
+
+				if (res == IDYES)
+				{
+					// Do nothing
+				}
+				else
+				{
+					fclose(fp);
+					return false;
+				}
 			}
 		}
 	}
@@ -1636,11 +1717,14 @@ bool FileManager::loadFileData(Document doc, int64_t fileSize, const TCHAR * fil
 #endif
 				break;
 			case SC_STATUS_BADALLOC:
+			{
 				pNativeSpeaker->messageBox("FileTooBigToOpen",
 					_pNotepadPlus->_pEditView->getHSelf(),
 					TEXT("File is too big to be opened by Notepad++"),
 					TEXT("Exception: File size problem"),
 					MB_OK | MB_APPLMODAL);
+			}
+			[[fallthrough]];
 			case SC_STATUS_FAILURE:
 			default:
 				_stprintf_s(szException, _countof(szException), TEXT("%d (Scintilla)"), sciStatus);
@@ -1698,7 +1782,7 @@ BufferID FileManager::getBufferFromName(const TCHAR* name)
 	{
 		if (OrdinalIgnoreCaseCompareStrings(name, buf->getFullPathName()) == 0)
 		{
-			if (buf->_referees[0]->isVisible())
+			if (!(buf->_referees.empty()) && buf->_referees[0]->isVisible())
 			{
 				return buf->getID();
 			}
